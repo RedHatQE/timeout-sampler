@@ -29,7 +29,6 @@ Download = "https://pypi.org/project/timeout-sampler"
 [tool.poetry.dependencies]
 python = "^3.8"
 python-simple-logger = "^1.0.8"
-pyyaml = "^6.0.1"
 
 [tool.poetry.group.dev.dependencies]
 ipdb = "^0.13.13"
