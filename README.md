@@ -22,11 +22,11 @@ def random_number(start, end):
 samples = TimeoutSampler(
     wait_timeout=60,
     sleep=1,
-    func=foo,
+    func=random_number,
     start=1,
     end=10,
 )
-    for sample in samples:
-        if sample == 5:
-            return sample
+for sample in samples:
+    if sample == 5:
+        break
 ```
