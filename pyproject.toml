@@ -35,7 +35,7 @@ ipdb = "^0.13.13"
 ipython = "*"
 
 [tool.poetry.group.unittests.dependencies]
-pytest = "^7.4.3"
+pytest = "^8.0.0"
 
 [tool.poetry-dynamic-versioning.substitution]
 files = ["VERSION"]
