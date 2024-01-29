@@ -16,10 +16,10 @@ license = "Apache-2.0"
 readme = "README.md"
 homepage = "https://github.com/RedHatQE/timeout-sampler"
 documentation = "https://github.com/RedHatQE/timeout-sampler"
-packages = [{include = "timeout_sampler"}]
+packages = [{ include = "timeout_sampler" }]
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
 ]
 
 [tool.poetry.urls]
@@ -28,7 +28,7 @@ Download = "https://pypi.org/project/timeout-sampler"
 
 [tool.poetry.dependencies]
 python = "^3.8"
-python-simple-logger = "^1.0.8"
+python-simple-logger = ">=1.0.8"
 
 [tool.poetry.group.dev.dependencies]
 ipdb = "^0.13.13"
