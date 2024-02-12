@@ -62,7 +62,7 @@ class TimeoutSampler:
         sleep (int): Time in seconds between calls to func
         func (Callable): to be wrapped by TimeoutSampler
         exceptions_dict (dict): Exception handling definition
-        print_log (bool): Print elapsed time to log
+        print_log (bool): Print function call to log
     """
 
     def __init__(
@@ -121,12 +121,15 @@ class TimeoutSampler:
             any: Return value from `func`
         """
         timeout_watch = TimeoutWatch(timeout=self.wait_timeout)
-        if self.print_log:
-            LOGGER.info(
+        log_str = (
                 f"Waiting for {self.wait_timeout} seconds"
                 f" [{datetime.timedelta(seconds=self.wait_timeout)}], retry every"
-                f" {self.sleep} seconds. ({self._func_log})"
+                f" {self.sleep} seconds."
             )
+        if self.print_log:
+            log_str += f" {self._func_log}"
+
+        LOGGER.info(log_str)
 
         last_exp = None
         while timeout_watch.remaining_time() > 0:
@@ -146,7 +149,7 @@ class TimeoutSampler:
                 time.sleep(self.sleep)
 
             finally:
-                if self.elapsed_time and self.print_log:
+                if self.elapsed_time:
                     LOGGER.info(
                         "Elapsed time:" f" {self.elapsed_time} [{datetime.timedelta(seconds=self.elapsed_time)}]"
                     )
