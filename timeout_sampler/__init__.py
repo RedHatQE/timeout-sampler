@@ -122,10 +122,10 @@ class TimeoutSampler:
         """
         timeout_watch = TimeoutWatch(timeout=self.wait_timeout)
         log_str = (
-                f"Waiting for {self.wait_timeout} seconds"
-                f" [{datetime.timedelta(seconds=self.wait_timeout)}], retry every"
-                f" {self.sleep} seconds."
-            )
+            f"Waiting for {self.wait_timeout} seconds"
+            f" [{datetime.timedelta(seconds=self.wait_timeout)}], retry every"
+            f" {self.sleep} seconds."
+        )
         if self.print_log:
             log_str += f" {self._func_log}"
 
