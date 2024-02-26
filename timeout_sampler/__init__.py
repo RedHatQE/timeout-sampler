@@ -63,6 +63,7 @@ class TimeoutSampler:
         func (Callable): to be wrapped by TimeoutSampler
         exceptions_dict (dict): Exception handling definition
         print_log (bool): Print elapsed time to log
+        print_func_log (bool): Add function call info to log
     """
 
     def __init__(
@@ -72,6 +73,7 @@ class TimeoutSampler:
         func,
         exceptions_dict=None,
         print_log=True,
+        print_func_log=True,
         **func_kwargs,
     ):
         self.wait_timeout = wait_timeout
@@ -80,6 +82,7 @@ class TimeoutSampler:
         self.func_kwargs = func_kwargs
         self.elapsed_time = None
         self.print_log = print_log
+        self.print_func_log = print_func_log
 
         self.exceptions_dict = exceptions_dict or {Exception: []}
         self._exceptions = tuple(self.exceptions_dict.keys())
@@ -122,11 +125,16 @@ class TimeoutSampler:
         """
         timeout_watch = TimeoutWatch(timeout=self.wait_timeout)
         if self.print_log:
-            LOGGER.info(
+            log = (
                 f"Waiting for {self.wait_timeout} seconds"
                 f" [{datetime.timedelta(seconds=self.wait_timeout)}], retry every"
-                f" {self.sleep} seconds. ({self._func_log})"
+                f" {self.sleep} seconds."
             )
+
+            if self.print_func_log:
+                log += f" ({self._func_log})"
+
+            LOGGER.info(log)
 
         last_exp = None
         while timeout_watch.remaining_time() > 0:
