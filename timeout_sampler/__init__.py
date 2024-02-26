@@ -62,7 +62,8 @@ class TimeoutSampler:
         sleep (int): Time in seconds between calls to func
         func (Callable): to be wrapped by TimeoutSampler
         exceptions_dict (dict): Exception handling definition
-        print_log (bool): Print function call to log
+        print_log (bool): Print elapsed time to log
+        print_func_log (bool): Add function call info to log
     """
 
     def __init__(
@@ -72,6 +73,7 @@ class TimeoutSampler:
         func,
         exceptions_dict=None,
         print_log=True,
+        print_func_log=True,
         **func_kwargs,
     ):
         self.wait_timeout = wait_timeout
@@ -80,6 +82,7 @@ class TimeoutSampler:
         self.func_kwargs = func_kwargs
         self.elapsed_time = None
         self.print_log = print_log
+        self.print_func_log = print_func_log
 
         self.exceptions_dict = exceptions_dict or {Exception: []}
         self._exceptions = tuple(self.exceptions_dict.keys())
@@ -121,15 +124,18 @@ class TimeoutSampler:
             any: Return value from `func`
         """
         timeout_watch = TimeoutWatch(timeout=self.wait_timeout)
-        log_str = (
-            f"Waiting for {self.wait_timeout} seconds"
-            f" [{datetime.timedelta(seconds=self.wait_timeout)}], retry every"
-            f" {self.sleep} seconds."
-        )
-        if self.print_log:
-            log_str += f" {self._func_log}"
 
-        LOGGER.info(log_str)
+        if self.print_log:
+            log = (
+                f"Waiting for {self.wait_timeout} seconds"
+                f" [{datetime.timedelta(seconds=self.wait_timeout)}], retry every"
+                f" {self.sleep} seconds."
+            )
+
+            if self.print_func_log:
+                log += f" ({self._func_log})"
+
+            LOGGER.info(log)
 
         last_exp = None
         while timeout_watch.remaining_time() > 0:
@@ -203,7 +209,7 @@ class TimeoutSampler:
         exp_name = exp.__class__.__name__ if exp else "N/A"
 
         last_exception_log = f"Last exception: {exp_name}: {exp}"
-        return f"{self.wait_timeout}\n{self._func_log}\n{last_exception_log}"
+        return f"{self.wait_timeout}\n{self._func_log if self.print_func_log else ''}\n{last_exception_log}"
 
 
 class TimeoutWatch:
