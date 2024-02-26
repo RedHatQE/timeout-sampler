@@ -124,6 +124,7 @@ class TimeoutSampler:
             any: Return value from `func`
         """
         timeout_watch = TimeoutWatch(timeout=self.wait_timeout)
+
         if self.print_log:
             log = (
                 f"Waiting for {self.wait_timeout} seconds"
@@ -154,7 +155,7 @@ class TimeoutSampler:
                 time.sleep(self.sleep)
 
             finally:
-                if self.elapsed_time and self.print_log:
+                if self.elapsed_time:
                     LOGGER.info(
                         "Elapsed time:" f" {self.elapsed_time} [{datetime.timedelta(seconds=self.elapsed_time)}]"
                     )
@@ -208,7 +209,7 @@ class TimeoutSampler:
         exp_name = exp.__class__.__name__ if exp else "N/A"
 
         last_exception_log = f"Last exception: {exp_name}: {exp}"
-        return f"{self.wait_timeout}\n{self._func_log}\n{last_exception_log}"
+        return f"{self.wait_timeout}\n{self._func_log if self.print_func_log else ''}\n{last_exception_log}"
 
 
 class TimeoutWatch:
