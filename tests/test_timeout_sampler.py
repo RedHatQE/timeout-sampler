@@ -137,7 +137,7 @@ class TestTimeoutSampler:
 
 
 def test_sampler():
-    sampler = TimeoutSampler(wait_timeout=1, sleep=1, func=lambda: True, print_log=True)
+    sampler = TimeoutSampler(wait_timeout=1, sleep=1, func=lambda: True)
     for sample in sampler:
         if sample:
             return
