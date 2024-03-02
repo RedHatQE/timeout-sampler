@@ -1,6 +1,5 @@
 import datetime
 import time
-from warnings import warn
 from simple_logger.logger import get_logger
 
 LOGGER = get_logger(name=__name__)
@@ -80,16 +79,10 @@ class TimeoutSampler:
         self.sleep = sleep
         self.func = func
         self.func_kwargs = func_kwargs
+        self.print_log = print_log
         self.print_func_log = print_func_log
         self.exceptions_dict = exceptions_dict or {Exception: []}
         self._exceptions = tuple(self.exceptions_dict.keys())
-
-        if print_log:
-            warn(
-                "The `print_log` argument is deprecated. Use `print_func_log` instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
 
     def _get_func_info(self, _func, type_):
         # If func is partial function.
@@ -127,16 +120,17 @@ class TimeoutSampler:
             TimeoutExpiredError: if `func` takes longer than `wait_timeout` seconds to return a value
         """
         timeout_watch = TimeoutWatch(timeout=self.wait_timeout)
-        log = (
-            f"Waiting for {self.wait_timeout} seconds"
-            f" [{datetime.timedelta(seconds=self.wait_timeout)}], retry every"
-            f" {self.sleep} seconds."
-        )
+        if self.print_log:
+            log = (
+                f"Waiting for {self.wait_timeout} seconds"
+                f" [{datetime.timedelta(seconds=self.wait_timeout)}], retry every"
+                f" {self.sleep} seconds."
+            )
 
-        if self.print_func_log:
-            log += f" ({self._func_log})"
+            if self.print_func_log:
+                log += f" ({self._func_log})"
 
-        LOGGER.info(log)
+            LOGGER.info(log)
 
         last_exp = None
         elapsed_time = None
@@ -158,6 +152,8 @@ class TimeoutSampler:
 
             finally:
                 if elapsed_time:
+                    # LOGGER.error(self._func_log)
+
                     LOGGER.info(f"Elapsed time: {elapsed_time} [{datetime.timedelta(seconds=elapsed_time)}]")
 
         raise TimeoutExpiredError(self._get_exception_log(exp=last_exp))
