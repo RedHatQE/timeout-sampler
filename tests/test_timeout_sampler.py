@@ -134,3 +134,24 @@ class TestTimeoutSampler:
             )
 
         assert exception_match, f"Expected Regex: {expected['exception_log_regex']!r} Exception Log: {exception_log!r}"
+
+
+def test_sampler():
+    sampler = TimeoutSampler(wait_timeout=1, sleep=1, func=lambda: True)
+    for sample in sampler:
+        if sample:
+            return
+
+    pytest.fail("Sampler rise timeout")
+
+
+def test_sampler_negative():
+    sampler = TimeoutSampler(
+        wait_timeout=10,
+        sleep=1,
+        func=lambda: False,
+    )
+    with pytest.raises(TimeoutExpiredError):
+        for sample in sampler:
+            if sample:
+                return
