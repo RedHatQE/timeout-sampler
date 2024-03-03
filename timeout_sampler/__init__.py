@@ -61,7 +61,7 @@ class TimeoutSampler:
         sleep (int): Time in seconds between calls to func
         func (Callable): to be wrapped by TimeoutSampler
         exceptions_dict (dict): Exception handling definition
-        print_log (bool): Print elapsed time to log. Deprecated
+        print_log (bool): Print elapsed time to log.
         print_func_log (bool): Add function call info to log
     """
 
