@@ -350,12 +350,12 @@ dev = ["argcomplete", "attrs (>=19.2)", "hypothesis (>=3.56)", "mock", "pygments
 
 [[package]]
 name = "python-simple-logger"
-version = "1.0.25"
+version = "1.0.26"
 description = "A simple logger for python"
 optional = false
 python-versions = "<4.0,>=3.8"
 files = [
-    {file = "python_simple_logger-1.0.25.tar.gz", hash = "sha256:ec1bf55b2c514fee4d73ec9b0d4ec2701e149adb2b49ace91bd4eb6b9bb3318e"},
+    {file = "python_simple_logger-1.0.26.tar.gz", hash = "sha256:e5af7c0ea09399d898ffbc0556434003953fec44a914dca4883cf1c428c413b5"},
 ]
 
 [package.dependencies]
