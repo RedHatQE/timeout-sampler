@@ -27,7 +27,7 @@ Download = "https://pypi.org/project/timeout-sampler"
 "Bug Tracker" = "https://github.com/RedHatQE/timeout-sampler/issues"
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.9"
 python-simple-logger = ">=1.0.8"
 
 [tool.poetry.group.dev.dependencies]
