@@ -251,7 +251,7 @@ wheels = [
 
 [[package]]
 name = "timeout-sampler"
-version = "0.0.1"
+version = "1.0.3"
 source = { editable = "." }
 dependencies = [
     { name = "pytest" },
