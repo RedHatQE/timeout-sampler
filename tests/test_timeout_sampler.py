@@ -158,7 +158,7 @@ def test_sampler_negative():
 
 
 def test_decorator():
-    timeout_sampler_deco(wait_timeout=1, sleep=1)(lambda: True)()
+    timeout_sampler_deco(wait_timeout=1, sleep=1)(lambda x: True)()
 
 
 def test_decorator_negative():
