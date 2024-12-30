@@ -75,14 +75,14 @@ class TimeoutSampler:
         exceptions_dict: dict[type[Exception], list[str]] | None = None,
         print_log: bool = True,
         print_func_log: bool = True,
-        *func_args: tuple[Any],
-        **func_kwargs: dict[Any, Any],
+        func_args: tuple[Any] | None = None,
+        **func_kwargs: dict[str, Any],
     ):
         self.wait_timeout = wait_timeout
         self.sleep = sleep
         self.func = func
-        self.func_kwargs = func_kwargs
-        self.func_args = func_args
+        self.func_args = func_args or ()
+        self.func_kwargs = func_kwargs or {}
         self.print_log = print_log
         self.print_func_log = print_func_log
         self.exceptions_dict: dict[type[Exception], list[str]] = exceptions_dict or {Exception: []}
@@ -241,8 +241,6 @@ def timeout_sampler_deco(
 ) -> Callable:
     def decorator(func: Callable) -> Callable:
         def wrapper(*args: Any, **kwargs: dict[str, Any]) -> Any:
-            __import__("ipdb").set_trace()
-
             for sample in TimeoutSampler(
                 func=func,
                 wait_timeout=wait_timeout,
@@ -251,7 +249,7 @@ def timeout_sampler_deco(
                 print_log=print_log,
                 print_func_log=print_func_log,
                 func_args=args,
-                func_kwargs=kwargs,
+                **kwargs,
             ):
                 if sample:
                     return sample
