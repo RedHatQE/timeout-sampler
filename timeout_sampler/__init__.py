@@ -228,3 +228,15 @@ class TimeoutWatch:
         Return the remaining part of timeout since the object was created.
         """
         return self.start_time + self.timeout - time.time()
+
+
+def timeout_sampler_deco(wait_timeout: int, sleep: int) -> Callable:
+    def decorator(func: Callable) -> Callable:
+        def wrapper(*args: tuple[Any], **kwargs: dict[str, Any]) -> Any:
+            for sample in TimeoutSampler(func=func, wait_timeout=wait_timeout, sleep=sleep, *args, **kwargs):  # type: ignore
+                if sample:
+                    return sample
+
+        return wrapper
+
+    return decorator
