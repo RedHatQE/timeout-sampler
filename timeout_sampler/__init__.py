@@ -1,17 +1,18 @@
+from __future__ import annotations
 import datetime
 import time
+from typing import Any, Callable
 from simple_logger.logger import get_logger
 
 LOGGER = get_logger(name=__name__)
 
 
 class TimeoutExpiredError(Exception):
-    def __init__(self, value, last_exp=None):
+    def __init__(self, value: Any) -> None:
         super().__init__()
         self.value = value
-        self.last_exp = last_exp
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Timed Out: {self.value}"
 
 
@@ -68,13 +69,13 @@ class TimeoutSampler:
 
     def __init__(
         self,
-        wait_timeout,
-        sleep,
-        func,
-        exceptions_dict=None,
-        print_log=True,
-        print_func_log=True,
-        **func_kwargs,
+        wait_timeout: int,
+        sleep: int,
+        func: Callable,
+        exceptions_dict: dict[type[Exception], list[str]] | None = None,
+        print_log: bool = True,
+        print_func_log: bool = True,
+        **func_kwargs: dict[Any, Any],
     ):
         self.wait_timeout = wait_timeout
         self.sleep = sleep
@@ -82,13 +83,13 @@ class TimeoutSampler:
         self.func_kwargs = func_kwargs
         self.print_log = print_log
         self.print_func_log = print_func_log
-        self.exceptions_dict = exceptions_dict or {Exception: []}
+        self.exceptions_dict: dict[type[Exception], list[str]] = exceptions_dict or {Exception: []}
         self._exceptions = tuple(self.exceptions_dict.keys())
 
-    def _get_func_info(self, _func, type_):
+    def _get_func_info(self, _func: Callable, type_: str) -> Any:
         # If func is partial function.
         if getattr(_func, "func", None):
-            return self._get_func_info(_func=_func.func, type_=type_)
+            return self._get_func_info(_func=_func.func, type_=type_)  # type: ignore
 
         res = getattr(_func, type_, None)
         if res:
@@ -99,18 +100,18 @@ class TimeoutSampler:
 
                 elif type_ == "__name__":
                     free_vars = _func.__code__.co_freevars
-                    free_vars = f"{'.'.join(free_vars)}." if free_vars else ""
-                    return f"lambda: {free_vars}{'.'.join(_func.__code__.co_names)}"
+                    free_vars_str = f"{'.'.join(free_vars)}." if free_vars else ""
+                    return f"lambda: {free_vars_str}{'.'.join(_func.__code__.co_names)}"
             return res
 
     @property
-    def _func_log(self):
+    def _func_log(self) -> str:
         _func_kwargs = f"Kwargs: {self.func_kwargs}" if self.func_kwargs else ""
         _func_module = self._get_func_info(_func=self.func, type_="__module__")
         _func_name = self._get_func_info(_func=self.func, type_="__name__")
         return f"Function: {_func_module}.{_func_name} {_func_kwargs}".strip()
 
-    def __iter__(self):
+    def __iter__(self) -> Any:
         """
         Call `func` and yield the result, or raise an exception on timeout.
 
@@ -146,7 +147,7 @@ class TimeoutSampler:
                 last_exp = exp
                 elapsed_time = self.wait_timeout - timeout_watch.remaining_time()
                 if self._should_raise_by_exception(exp=last_exp):
-                    raise TimeoutExpiredError(self._get_exception_log(exp=last_exp), last_exp)
+                    raise TimeoutExpiredError(self._get_exception_log(exp=last_exp))
 
                 time.sleep(self.sleep)
                 elapsed_time = None
@@ -155,10 +156,10 @@ class TimeoutSampler:
                 if self.print_log and elapsed_time:
                     LOGGER.info(f"Elapsed time: {elapsed_time} [{datetime.timedelta(seconds=elapsed_time)}]")
 
-        raise TimeoutExpiredError(self._get_exception_log(exp=last_exp), last_exp)
+        raise TimeoutExpiredError(self._get_exception_log(exp=last_exp))
 
     @staticmethod
-    def _is_exception_matched(exp, exception_messages):
+    def _is_exception_matched(exp: Exception, exception_messages: list[str]) -> bool:
         """
         Verify whether exception text is allowed and should be raised
 
@@ -176,7 +177,7 @@ class TimeoutSampler:
         # Prevent match if provided with empty string
         return any(msg and msg in str(exp) for msg in exception_messages)
 
-    def _should_raise_by_exception(self, exp):
+    def _should_raise_by_exception(self, exp: Exception) -> bool:
         """
         Verify whether exception should be raised during execution of `func`
 
@@ -189,13 +190,13 @@ class TimeoutSampler:
 
         for entry in self.exceptions_dict:
             if isinstance(exp, entry):  # Check inheritance for raised exception
-                exception_messages = self.exceptions_dict.get(entry)
+                exception_messages = self.exceptions_dict.get(entry, [])
                 if self._is_exception_matched(exp=exp, exception_messages=exception_messages):
                     return False
 
         return True
 
-    def _get_exception_log(self, exp):
+    def _get_exception_log(self, exp: Exception | None = None) -> str:
         """
         Get exception log message
 
@@ -217,11 +218,11 @@ class TimeoutWatch:
     of a given interval
     """
 
-    def __init__(self, timeout):
+    def __init__(self, timeout: int) -> None:
         self.timeout = timeout
         self.start_time = time.time()
 
-    def remaining_time(self):
+    def remaining_time(self) -> float:
         """
         Return the remaining part of timeout since the object was created.
         """
