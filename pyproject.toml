@@ -1,3 +1,7 @@
+[tool.pytest.ini_options]
+addopts = ["--pdbcls=IPython.terminal.debugger:TerminalPdb"]
+
+
 [tool.ruff]
 preview = true
 line-length = 120
