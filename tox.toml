@@ -1,0 +1,7 @@
+skipsdist = true
+
+envlist = ["unittests"]
+
+[env.unittests]
+deps = ["uv"]
+commands = [["uv", "run", "pytest"]]
