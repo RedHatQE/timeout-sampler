@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from timeout_sampler import TimeoutExpiredError, TimeoutSampler
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler, timeout_sampler_deco
 
 
 class TestTimeoutSampler:
@@ -155,3 +155,12 @@ def test_sampler_negative():
         for sample in sampler:
             if sample:
                 return
+
+
+def test_decorator():
+    timeout_sampler_deco(wait_timeout=1, sleep=1)(lambda: True)()
+
+
+def test_decorator_negative():
+    with pytest.raises(TimeoutExpiredError):
+        timeout_sampler_deco(wait_timeout=1, sleep=1)(lambda: False)()
