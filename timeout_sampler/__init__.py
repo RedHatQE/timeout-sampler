@@ -77,7 +77,7 @@ class TimeoutSampler:
         print_log: bool = True,
         print_func_log: bool = True,
         func_args: tuple[Any] | None = None,
-        **func_kwargs: dict[str, Any],
+        **func_kwargs: Any,
     ):
         self.wait_timeout = wait_timeout
         self.sleep = sleep
