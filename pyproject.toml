@@ -7,43 +7,46 @@ output-format = "grouped"
 [tool.ruff.format]
 exclude = [".git", ".venv", ".mypy_cache", ".tox", "__pycache__"]
 
-[tool.poetry]
+[tool.mypy]
+check_untyped_defs = true
+disallow_any_generics = false
+disallow_incomplete_defs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+show_error_codes = true
+warn_unused_ignores = true
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["timeout_sampler"]
+
+[tool.uv]
+dev-dependencies = ["ipdb>=0.13.13", "ipython>=8.18.1"]
+
+[project]
 name = "timeout-sampler"
-version = "0.0.1"
+version = "1.0.3"
 description = "Timeout utility class to wait for any function output and interact with it in given time"
-authors = ["Meni Yakove <myakove@gmail.com>"]
 license = "Apache-2.0"
 readme = "README.md"
-homepage = "https://github.com/RedHatQE/timeout-sampler"
-documentation = "https://github.com/RedHatQE/timeout-sampler"
-packages = [{ include = "timeout_sampler" }]
+requires-python = ">=3.9"
 classifiers = [
   "Programming Language :: Python :: 3",
   "Operating System :: OS Independent",
 ]
+dependencies = ["pytest>=8.3.4", "python-simple-logger>=2.0.2"]
 
-[tool.poetry.urls]
+[[project.authors]]
+name = "Meni Yakove"
+email = " myakove@gmail.com"
+
+[project.urls]
+homepage = "https://github.com/RedHatQE/timeout-sampler"
+repository = "https://github.com/RedHatQE/timeout-sampler"
 Download = "https://pypi.org/project/timeout-sampler"
 "Bug Tracker" = "https://github.com/RedHatQE/timeout-sampler/issues"
 
-[tool.poetry.dependencies]
-python = "^3.9"
-python-simple-logger = ">=1.0.8"
-
-[tool.poetry.group.dev.dependencies]
-ipdb = "^0.13.13"
-ipython = "*"
-
-[tool.poetry.group.unittests.dependencies]
-pytest = "^8.0.0"
-
-[tool.poetry-dynamic-versioning.substitution]
-files = ["VERSION"]
-
-[tool.poetry-dynamic-versioning]
-enable = true
-pattern = "((?P<epoch>\\d+)!)?(?P<base>\\d+(\\.\\d+)*)"
 
 [build-system]
-requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning"]
-build-backend = "poetry_dynamic_versioning.backend"
+requires = ["hatchling"]
+build-backend = "hatchling.build"

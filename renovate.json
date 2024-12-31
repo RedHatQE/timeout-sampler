@@ -1,1 +1,18 @@
-{"$schema": "https://docs.renovatebot.com/renovate-schema.json", "packageRules": [{"matchPackagePatterns": ["python-simple-logger", "ipdb", "ipython", "pytest"], "groupName": "poetry-deps"}]}
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    ":dependencyDashboard",
+    ":maintainLockFilesWeekly",
+    ":prHourlyLimitNone"
+  ],
+  "prConcurrentLimit": 0,
+  "lockFileMaintenance": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "matchPackagePatterns": ["*"],
+      "groupName": "python-deps"
+    }
+  ]
+}

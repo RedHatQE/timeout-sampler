@@ -5,7 +5,7 @@ Utility class for waiting to any function output and interact with it in given t
 ## Installation
 
 ```bash
-pip3 install timeout-sampler
+python3 -m pip install timeout-sampler
 ```
 
 ## Usage
