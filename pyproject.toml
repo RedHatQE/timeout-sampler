@@ -29,7 +29,7 @@ dev-dependencies = ["ipdb>=0.13.13", "ipython>=8.18.1"]
 
 [project]
 name = "timeout-sampler"
-version = "1.0.3"
+version = "1.0.4"
 description = "Timeout utility class to wait for any function output and interact with it in given time"
 license = "Apache-2.0"
 readme = "README.md"
@@ -49,7 +49,6 @@ homepage = "https://github.com/RedHatQE/timeout-sampler"
 repository = "https://github.com/RedHatQE/timeout-sampler"
 Download = "https://pypi.org/project/timeout-sampler"
 "Bug Tracker" = "https://github.com/RedHatQE/timeout-sampler/issues"
-
 
 [build-system]
 requires = ["hatchling"]
