@@ -8,9 +8,10 @@ LOGGER = get_logger(name=__name__)
 
 
 class TimeoutExpiredError(Exception):
-    def __init__(self, value: Any) -> None:
+    def __init__(self, value: str, last_exp: Exception | None = None) -> None:
         super().__init__()
         self.value = value
+        self.last_exp = last_exp
 
     def __str__(self) -> str:
         return f"Timed Out: {self.value}"
@@ -150,7 +151,7 @@ class TimeoutSampler:
                 last_exp = exp
                 elapsed_time = self.wait_timeout - timeout_watch.remaining_time()
                 if self._should_raise_by_exception(exp=last_exp):
-                    raise TimeoutExpiredError(self._get_exception_log(exp=last_exp))
+                    raise TimeoutExpiredError(self._get_exception_log(exp=last_exp), last_exp=last_exp)
 
                 time.sleep(self.sleep)
                 elapsed_time = None
@@ -159,7 +160,7 @@ class TimeoutSampler:
                 if self.print_log and elapsed_time:
                     LOGGER.info(f"Elapsed time: {elapsed_time} [{datetime.timedelta(seconds=elapsed_time)}]")
 
-        raise TimeoutExpiredError(self._get_exception_log(exp=last_exp))
+        raise TimeoutExpiredError(self._get_exception_log(exp=last_exp), last_exp=last_exp)
 
     @staticmethod
     def _is_exception_matched(exp: Exception, exception_messages: list[str]) -> bool:
