@@ -8,9 +8,10 @@ LOGGER = get_logger(name=__name__)
 
 
 class TimeoutExpiredError(Exception):
-    def __init__(self, value: Any) -> None:
+    def __init__(self, value: str, last_exp: Exception | None = None) -> None:
         super().__init__()
         self.value = value
+        self.last_exp = last_exp
 
     def __str__(self) -> str:
         return f"Timed Out: {self.value}"
