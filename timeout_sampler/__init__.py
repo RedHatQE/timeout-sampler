@@ -151,7 +151,7 @@ class TimeoutSampler:
                 last_exp = exp
                 elapsed_time = self.wait_timeout - timeout_watch.remaining_time()
                 if self._should_raise_by_exception(exp=last_exp):
-                    raise TimeoutExpiredError(self._get_exception_log(exp=last_exp))
+                    raise TimeoutExpiredError(self._get_exception_log(exp=last_exp), last_exp=last_exp)
 
                 time.sleep(self.sleep)
                 elapsed_time = None
@@ -160,7 +160,7 @@ class TimeoutSampler:
                 if self.print_log and elapsed_time:
                     LOGGER.info(f"Elapsed time: {elapsed_time} [{datetime.timedelta(seconds=elapsed_time)}]")
 
-        raise TimeoutExpiredError(self._get_exception_log(exp=last_exp))
+        raise TimeoutExpiredError(self._get_exception_log(exp=last_exp), last_exp=last_exp)
 
     @staticmethod
     def _is_exception_matched(exp: Exception, exception_messages: list[str]) -> bool:
