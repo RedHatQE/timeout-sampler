@@ -233,13 +233,24 @@ class TimeoutWatch:
         return self.start_time + self.timeout - time.time()
 
 
-def timeout_sampler_deco(
+def retry(
     wait_timeout: int,
     sleep: int,
     exceptions_dict: dict[type[Exception], list[str]] | None = None,
     print_log: bool = True,
     print_func_log: bool = True,
 ) -> Callable:
+    """
+    Decorator for TimeoutSampler, For usage see TimeoutSampler.
+
+    Example:
+        from timeout_sampler import retry
+
+        @retry(wait_timeout=1, sleep=1)
+        def always_succeeds():
+            return True
+    """
+
     def decorator(func: Callable) -> Callable:
         def wrapper(*args: Any, **kwargs: dict[str, Any]) -> Any:
             for sample in TimeoutSampler(
