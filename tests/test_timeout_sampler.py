@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from timeout_sampler import TimeoutExpiredError, TimeoutSampler
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler, retry
 
 
 class TestTimeoutSampler:
@@ -155,3 +155,25 @@ def test_sampler_negative():
         for sample in sampler:
             if sample:
                 return
+
+
+# retry decorator tests
+
+
+@retry(wait_timeout=1, sleep=1)
+def always_succeeds():
+    return True
+
+
+@retry(wait_timeout=1, sleep=1)
+def never_succeeds():
+    return False
+
+
+def test_decorator():
+    always_succeeds()
+
+
+def test_decorator_negative():
+    with pytest.raises(TimeoutExpiredError):
+        never_succeeds()

@@ -1,11 +1,15 @@
+[tool.pytest.ini_options]
+addopts = ["--pdbcls=IPython.terminal.debugger:TerminalPdb"]
+
+
 [tool.ruff]
 preview = true
 line-length = 120
 fix = true
 output-format = "grouped"
 
-  [tool.ruff.format]
-  exclude = [ ".git", ".venv", ".mypy_cache", ".tox", "__pycache__" ]
+[tool.ruff.format]
+exclude = [".git", ".venv", ".mypy_cache", ".tox", "__pycache__"]
 
 [tool.mypy]
 check_untyped_defs = true
@@ -16,11 +20,12 @@ no_implicit_optional = true
 show_error_codes = true
 warn_unused_ignores = true
 
+
 [tool.hatch.build.targets.wheel]
-packages = [ "timeout_sampler" ]
+packages = ["timeout_sampler"]
 
 [tool.uv]
-dev-dependencies = [ "ipdb>=0.13.13", "ipython>=8.18.1" ]
+dev-dependencies = ["ipdb>=0.13.13", "ipython>=8.18.1"]
 
 [project]
 name = "timeout-sampler"
@@ -31,20 +36,20 @@ readme = "README.md"
 requires-python = ">=3.9"
 classifiers = [
   "Programming Language :: Python :: 3",
-  "Operating System :: OS Independent"
+  "Operating System :: OS Independent",
 ]
-dependencies = [ "pytest>=8.3.4", "python-simple-logger>=2.0.2" ]
+dependencies = ["pytest>=8.3.4", "python-simple-logger>=2.0.2"]
 
-  [[project.authors]]
-  name = "Meni Yakove"
-  email = " myakove@gmail.com"
+[[project.authors]]
+name = "Meni Yakove"
+email = " myakove@gmail.com"
 
-  [project.urls]
-  homepage = "https://github.com/RedHatQE/timeout-sampler"
-  repository = "https://github.com/RedHatQE/timeout-sampler"
-  Download = "https://pypi.org/project/timeout-sampler"
-  "Bug Tracker" = "https://github.com/RedHatQE/timeout-sampler/issues"
+[project.urls]
+homepage = "https://github.com/RedHatQE/timeout-sampler"
+repository = "https://github.com/RedHatQE/timeout-sampler"
+Download = "https://pypi.org/project/timeout-sampler"
+"Bug Tracker" = "https://github.com/RedHatQE/timeout-sampler/issues"
 
 [build-system]
-requires = [ "hatchling" ]
+requires = ["hatchling"]
 build-backend = "hatchling.build"

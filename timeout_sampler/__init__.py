@@ -76,12 +76,14 @@ class TimeoutSampler:
         exceptions_dict: dict[type[Exception], list[str]] | None = None,
         print_log: bool = True,
         print_func_log: bool = True,
-        **func_kwargs: dict[Any, Any],
+        func_args: tuple[Any] | None = None,
+        **func_kwargs: Any,
     ):
         self.wait_timeout = wait_timeout
         self.sleep = sleep
         self.func = func
-        self.func_kwargs = func_kwargs
+        self.func_args = func_args or ()
+        self.func_kwargs = func_kwargs or {}
         self.print_log = print_log
         self.print_func_log = print_func_log
         self.exceptions_dict: dict[type[Exception], list[str]] = exceptions_dict or {Exception: []}
@@ -108,9 +110,10 @@ class TimeoutSampler:
     @property
     def _func_log(self) -> str:
         _func_kwargs = f"Kwargs: {self.func_kwargs}" if self.func_kwargs else ""
+        _func_args = f"Args: {self.func_args}" if self.func_args else ""
         _func_module = self._get_func_info(_func=self.func, type_="__module__")
         _func_name = self._get_func_info(_func=self.func, type_="__name__")
-        return f"Function: {_func_module}.{_func_name} {_func_kwargs}".strip()
+        return f"Function: {_func_module}.{_func_name} {_func_args} {_func_kwargs}".strip()
 
     def __iter__(self) -> Any:
         """
@@ -140,7 +143,7 @@ class TimeoutSampler:
         while timeout_watch.remaining_time() > 0:
             try:
                 elapsed_time = self.wait_timeout - timeout_watch.remaining_time()
-                yield self.func(**self.func_kwargs)
+                yield self.func(*self.func_args, **self.func_kwargs)
                 time.sleep(self.sleep)
                 elapsed_time = None
 
@@ -228,3 +231,41 @@ class TimeoutWatch:
         Return the remaining part of timeout since the object was created.
         """
         return self.start_time + self.timeout - time.time()
+
+
+def retry(
+    wait_timeout: int,
+    sleep: int,
+    exceptions_dict: dict[type[Exception], list[str]] | None = None,
+    print_log: bool = True,
+    print_func_log: bool = True,
+) -> Callable:
+    """
+    Decorator for TimeoutSampler, For usage see TimeoutSampler.
+
+    Example:
+        from timeout_sampler import retry
+
+        @retry(wait_timeout=1, sleep=1)
+        def always_succeeds():
+            return True
+    """
+
+    def decorator(func: Callable) -> Callable:
+        def wrapper(*args: Any, **kwargs: dict[str, Any]) -> Any:
+            for sample in TimeoutSampler(
+                func=func,
+                wait_timeout=wait_timeout,
+                sleep=sleep,
+                exceptions_dict=exceptions_dict,
+                print_log=print_log,
+                print_func_log=print_func_log,
+                func_args=args,
+                **kwargs,
+            ):
+                if sample:
+                    return sample
+
+        return wrapper
+
+    return decorator
