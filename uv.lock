@@ -233,11 +233,11 @@ wheels = [
 
 [[package]]
 name = "pygments"
-version = "2.19.0"
+version = "2.19.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/d3/c0/9c9832e5be227c40e1ce774d493065f83a91d6430baa7e372094e9683a45/pygments-2.19.0.tar.gz", hash = "sha256:afc4146269910d4bdfabcd27c24923137a74d562a23a320a41a55ad303e19783", size = 4967733 }
+sdist = { url = "https://files.pythonhosted.org/packages/7c/2d/c3338d48ea6cc0feb8446d8e6937e1408088a72a39937982cc6111d17f84/pygments-2.19.1.tar.gz", hash = "sha256:61c16d2a8576dc0649d9f39e089b5f02bcd27fba10d8fb4dcc28173f7a45151f", size = 4968581 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/20/dc/fde3e7ac4d279a331676829af4afafd113b34272393d73f610e8f0329221/pygments-2.19.0-py3-none-any.whl", hash = "sha256:4755e6e64d22161d5b61432c0600c923c5927214e7c956e31c23923c89251a9b", size = 1225305 },
+    { url = "https://files.pythonhosted.org/packages/8a/0b/9fcc47d19c48b59121088dd6da2488a49d5f72dacf8262e2790a1d2c7d15/pygments-2.19.1-py3-none-any.whl", hash = "sha256:9ea1544ad55cecf4b8242fab6dd35a93bbce657034b0611ee383099054ab6d8c", size = 1225293 },
 ]
 
 [[package]]
@@ -259,12 +259,12 @@ wheels = [
 
 [[package]]
 name = "python-simple-logger"
-version = "2.0.2"
+version = "2.0.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorlog" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e6/40/ea9df26d88117f84acc77a0f301a032e6763559a3a2ee8dde0ffb49d8485/python_simple_logger-2.0.2.tar.gz", hash = "sha256:c40ba618245d3286d06e5e0780b36df5f83c7512018c7034a83e1eb010ab9793", size = 8232 }
+sdist = { url = "https://files.pythonhosted.org/packages/ab/d0/f1c4c118512c1211232d0a7037827e1e8f5582575cacd40079f5b38b9edb/python_simple_logger-2.0.3.tar.gz", hash = "sha256:8bc1b66ef567dd700945c7103287e5284dd1941d117c6d66f6a66a63b214d7da", size = 8072 }
 
 [[package]]
 name = "stack-data"
