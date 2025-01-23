@@ -226,7 +226,7 @@ class TimeoutWatch:
         self.timeout = timeout
         self.start_time = time.time()
 
-    def remaining_time(self) -> float:
+    def remaining_time(self) -> int | float:
         """
         Return the remaining part of timeout since the object was created.
         """
