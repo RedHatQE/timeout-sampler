@@ -228,11 +228,12 @@ class TimeoutWatch:
         self.timeout = timeout
         self.start_time = time.time()
 
-    def remaining_time(self) -> float:
+    def remaining_time(self) -> int | float:
         """
         Return the remaining part of timeout since the object was created.
         """
-        return self.start_time + self.timeout - time.time()
+        _remaining_time = self.start_time + self.timeout - time.time()
+        return _remaining_time if _remaining_time > 0 else 0
 
 
 def retry(
