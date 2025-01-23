@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 import datetime
 import time
 from typing import Any, Callable
+
 from simple_logger.logger import get_logger
 
 LOGGER = get_logger(name=__name__)
@@ -222,7 +224,7 @@ class TimeoutWatch:
     of a given interval
     """
 
-    def __init__(self, timeout: int) -> None:
+    def __init__(self, timeout: int | float) -> None:
         self.timeout = timeout
         self.start_time = time.time()
 
