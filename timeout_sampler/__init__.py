@@ -72,7 +72,7 @@ class TimeoutSampler:
 
     def __init__(
         self,
-        wait_timeout: int,
+        wait_timeout: int | float,
         sleep: int,
         func: Callable,
         exceptions_dict: dict[type[Exception], list[str]] | None = None,
