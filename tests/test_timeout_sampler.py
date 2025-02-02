@@ -137,7 +137,7 @@ class TestTimeoutSampler:
 
 
 def test_sampler():
-    sampler = TimeoutSampler(wait_timeout=1, sleep=1, func=lambda: True)
+    sampler = TimeoutSampler(wait_timeout=1, sleep=1, print_log=False, func=lambda: True)
     for sample in sampler:
         if sample:
             return
@@ -150,6 +150,7 @@ def test_sampler_negative():
         wait_timeout=10,
         sleep=1,
         func=lambda: False,
+        print_log=False,
     )
     with pytest.raises(TimeoutExpiredError):
         for sample in sampler:
@@ -160,12 +161,20 @@ def test_sampler_negative():
 # retry decorator tests
 
 
-@retry(wait_timeout=1, sleep=1)
+@retry(
+    wait_timeout=1,
+    sleep=1,
+    print_log=False,
+)
 def always_succeeds():
     return True
 
 
-@retry(wait_timeout=1, sleep=1)
+@retry(
+    wait_timeout=1,
+    sleep=1,
+    print_log=False,
+)
 def never_succeeds():
     return False
 
@@ -179,20 +188,20 @@ def test_decorator_negative():
         never_succeeds()
 
 
-# Test raise_on_expections
-def raise_on_expection():
+# Test raise_on_exceptions
+def raise_on_exception():
     raise ValueError()
 
 
-def raise_on_expection_with_msg():
+def raise_on_exception_with_msg():
     raise ValueError("ValueError")
 
 
 def test_raise_on_exception():
     with pytest.raises(TimeoutExpiredError):
         for sample in TimeoutSampler(
-            func=raise_on_expection,
-            wait_timeout=5,
+            func=raise_on_exception,
+            wait_timeout=2,
             sleep=1,
             raise_on_exceptions={ValueError: []},
             print_log=False,
@@ -204,8 +213,8 @@ def test_raise_on_exception():
 def test_raise_on_exception_with_msg():
     with pytest.raises(TimeoutExpiredError):
         for sample in TimeoutSampler(
-            func=raise_on_expection_with_msg,
-            wait_timeout=5,
+            func=raise_on_exception_with_msg,
+            wait_timeout=2,
             sleep=1,
             raise_on_exceptions={ValueError: ["ValueError"]},
             print_log=False,
@@ -217,7 +226,7 @@ def test_raise_on_exception_with_msg():
 def test_raise_on_exception_with_wrong_msg():
     with pytest.raises(TimeoutExpiredError, match=re.compile(r"Timed Out: 2", re.DOTALL)):
         for sample in TimeoutSampler(
-            func=raise_on_expection_with_msg,
+            func=raise_on_exception_with_msg,
             wait_timeout=2,
             sleep=1,
             raise_on_exceptions={ValueError: ["Wrong"]},
@@ -230,7 +239,7 @@ def test_raise_on_exception_with_wrong_msg():
 def test_raise_on_exception_with_wrong_exception():
     with pytest.raises(TimeoutExpiredError, match=re.compile(r"Timed Out: 2|Last exception: ValueError: ValueError")):
         for sample in TimeoutSampler(
-            func=raise_on_expection_with_msg,
+            func=raise_on_exception_with_msg,
             wait_timeout=2,
             sleep=1,
             raise_on_exceptions={TypeError: []},
