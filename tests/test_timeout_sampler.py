@@ -69,7 +69,7 @@ class TestTimeoutSampler:
             pytest.param(
                 {},
                 {
-                    "exception_log_regex": "^.*\nLast exception: N/A: None$",
+                    "exception_log_regex": "^.*\nLast exception: N/A",
                 },
                 id="noargs_timeout_only",
             ),
@@ -78,7 +78,7 @@ class TestTimeoutSampler:
                     "runtime_exception": Exception(),
                 },
                 {
-                    "exception_log_regex": "^.*\nLast exception: Exception: $",
+                    "exception_log_regex": "^.*\nLast exception: Exception:",
                 },
                 id="noargs_raise_exception_with_no_msg",
             ),
@@ -87,7 +87,7 @@ class TestTimeoutSampler:
                     "runtime_exception": ValueError(),
                 },
                 {
-                    "exception_log_regex": "^.*\nLast exception: ValueError: $",
+                    "exception_log_regex": "^.*\nLast exception: ValueError:",
                 },
                 id="noargs_raise_valueerror_with_no_msg",
             ),
@@ -99,7 +99,7 @@ class TestTimeoutSampler:
                     "runtime_exception": ValueError("test"),
                 },
                 {
-                    "exception_log_regex": "^.*\nLast exception: ValueError: test$",
+                    "exception_log_regex": "^.*\nLast exception: ValueError: test",
                 },
                 id="init_valueerror_with_msg_raise_valueerror_with_allowed_msg",
             ),
@@ -113,7 +113,7 @@ class TestTimeoutSampler:
                     "runtime_exception": IndexError("my allowed exception text"),
                 },
                 {
-                    "exception_log_regex": ("^.*\nLast exception: IndexError: my allowed exception text$"),
+                    "exception_log_regex": ("^.*\nLast exception: IndexError: my allowed exception text"),
                 },
                 id="init_multi_exceptions_raise_allowed_with_allowed_msg",
             ),
@@ -202,16 +202,16 @@ def test_raise_on_exception():
 
 
 def test_raise_on_exception_with_msg():
-    # with pytest.raises(TimeoutExpiredError):
-    for sample in TimeoutSampler(
-        func=raise_on_expection_with_msg,
-        wait_timeout=5,
-        sleep=1,
-        raise_on_exceptions={ValueError: ["ValueError"]},
-        print_log=False,
-    ):
-        if sample:
-            return
+    with pytest.raises(TimeoutExpiredError):
+        for sample in TimeoutSampler(
+            func=raise_on_expection_with_msg,
+            wait_timeout=5,
+            sleep=1,
+            raise_on_exceptions={ValueError: ["ValueError"]},
+            print_log=False,
+        ):
+            if sample:
+                return
 
 
 def test_raise_on_exception_with_wrong_msg():

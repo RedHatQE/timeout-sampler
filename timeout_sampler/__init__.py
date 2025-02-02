@@ -251,6 +251,7 @@ class TimeoutSampler:
         """
         exp_name = exp.__class__.__name__ if exp else "N/A"
         last_exception_log = f"Last exception: {exp_name}"
+
         if exp:
             last_exception_log += f": {exp}"
 
