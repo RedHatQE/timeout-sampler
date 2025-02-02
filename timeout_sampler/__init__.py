@@ -39,46 +39,49 @@ class TimeoutSampler:
 
     Yielding the output allows you to handle every value as you wish.
 
-    exceptions_dict should be in the following format:
-    {
-        exception0: [exception0_msg0],
-        exception1: [
-            exception1_msg0,
-            exception1_msg1
-        ],
-        exception2: []
-    }
+    exceptions_dict and raise_on_exceptions:
+        exceptions_dict should be in the following format:
+        {
+            exception0: [exception0_msg0],
+            exception1: [
+                exception1_msg0,
+                exception1_msg1
+            ],
+            exception2: []
+        }
 
-    If an exception is raised within `func`:
-        Example exception inheritance:
-            class Exception
-            class AExampleError(Exception)
-            class BExampleError(AExampleError)
+    exceptions_dict:
+        If an exception is raised within `func`:
+            Example exception inheritance:
+                class Exception
+                class AExampleError(Exception)
+                class BExampleError(AExampleError)
 
-        The raised exception's class will fall into one of three categories:
-            1. An exception class specifically declared in exceptions_dict
-                exceptions_dict: {BExampleError: []}
-                raise: BExampleError
-                result: continue
+            The raised exception's class will fall into one of three categories:
+                1. An exception class specifically declared in exceptions_dict
+                    exceptions_dict: {BExampleError: []}
+                    raise: BExampleError
+                    result: continue
 
-            2. A child class inherited from an exception class in exceptions_dict
-                exceptions_dict: {AExampleError: []}
-                raise: BExampleError
-                result: continue
+                2. A child class inherited from an exception class in exceptions_dict
+                    exceptions_dict: {AExampleError: []}
+                    raise: BExampleError
+                    result: continue
 
-            3. Everything else, this will always re-raise the exception
-                exceptions_dict: {BExampleError: []}
-                raise: AExampleError
-                result: raise
+                3. Everything else, this will always re-raise the exception
+                    exceptions_dict: {BExampleError: []}
+                    raise: AExampleError
+                    result: raise
+
 
     Args:
         wait_timeout (int): Time in seconds to wait for func to return a value equating to True
         sleep (int): Time in seconds between calls to func
         func (Callable): to be wrapped by TimeoutSampler
-        exceptions_dict (dict): Exception handling definition
+        exceptions_dict (dict): Exception handling definition, only exception that specifically raised in exceptions_dict will be ignored
         print_log (bool): Print elapsed time to log.
         print_func_log (bool): Add function call info to log
-        raise_on_exceptions (dict): Exceptions that should be raised immediately
+        raise_on_exceptions (dict): Exceptions that should be raised immediately.
     """
 
     def __init__(
