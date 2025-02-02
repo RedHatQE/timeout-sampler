@@ -177,3 +177,64 @@ def test_decorator():
 def test_decorator_negative():
     with pytest.raises(TimeoutExpiredError):
         never_succeeds()
+
+
+# Test raise_on_expections
+def raise_on_expection():
+    raise ValueError()
+
+
+def raise_on_expection_with_msg():
+    raise ValueError("ValueError")
+
+
+def test_raise_on_exception():
+    with pytest.raises(TimeoutExpiredError):
+        for sample in TimeoutSampler(
+            func=raise_on_expection,
+            wait_timeout=5,
+            sleep=1,
+            raise_on_exceptions={ValueError: []},
+            print_log=False,
+        ):
+            if sample:
+                return
+
+
+def test_raise_on_exception_with_msg():
+    # with pytest.raises(TimeoutExpiredError):
+    for sample in TimeoutSampler(
+        func=raise_on_expection_with_msg,
+        wait_timeout=5,
+        sleep=1,
+        raise_on_exceptions={ValueError: ["ValueError"]},
+        print_log=False,
+    ):
+        if sample:
+            return
+
+
+def test_raise_on_exception_with_wrong_msg():
+    with pytest.raises(TimeoutExpiredError, match=re.compile(r"Timed Out: 2", re.DOTALL)):
+        for sample in TimeoutSampler(
+            func=raise_on_expection_with_msg,
+            wait_timeout=2,
+            sleep=1,
+            raise_on_exceptions={ValueError: ["Wrong"]},
+            print_log=False,
+        ):
+            if sample:
+                return
+
+
+def test_raise_on_exception_with_wrong_exception():
+    with pytest.raises(TimeoutExpiredError, match=re.compile(r"Timed Out: 2|Last exception: ValueError: ValueError")):
+        for sample in TimeoutSampler(
+            func=raise_on_expection_with_msg,
+            wait_timeout=2,
+            sleep=1,
+            raise_on_exceptions={TypeError: []},
+            print_log=False,
+        ):
+            if sample:
+                return
