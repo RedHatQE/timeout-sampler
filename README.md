@@ -19,7 +19,7 @@ def random_number(start, end):
     if isinstance(start, str) or isinstance(end, str):
       raise TypeError("start and end must be int type")
 
-    if end > start:
+    if end <= start:
       raise ValueError("End must be greater than start")
 
     return randint(start, end)
