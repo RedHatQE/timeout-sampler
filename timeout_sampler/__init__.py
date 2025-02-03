@@ -39,7 +39,7 @@ class TimeoutSampler:
 
     Yielding the output allows you to handle every value as you wish.
 
-    exceptions_dict and raise_on_exceptions:
+    exceptions_dict:
         exceptions_dict should be in the following format:
         {
             exception0: [exception0_msg0],
@@ -50,7 +50,6 @@ class TimeoutSampler:
             exception2: []
         }
 
-    exceptions_dict:
         If an exception is raised within `func`:
             Example exception inheritance:
                 class Exception
@@ -81,7 +80,6 @@ class TimeoutSampler:
         exceptions_dict (dict): Exception handling definition, only exception that specifically raised in exceptions_dict will be ignored
         print_log (bool): Print elapsed time to log.
         print_func_log (bool): Add function call info to log
-        raise_on_exceptions (dict): Exceptions that should be raised immediately.
     """
 
     def __init__(
@@ -93,7 +91,6 @@ class TimeoutSampler:
         print_log: bool = True,
         print_func_log: bool = True,
         func_args: tuple[Any] | None = None,
-        raise_on_exceptions: dict[type[Exception], list[str]] | None = None,
         **func_kwargs: Any,
     ):
         self.wait_timeout = wait_timeout
@@ -104,7 +101,6 @@ class TimeoutSampler:
         self.print_log = print_log
         self.print_func_log = print_func_log
         self.exceptions_dict = exceptions_dict or {Exception: []}
-        self.raise_on_exceptions = raise_on_exceptions or {}
 
     def _get_func_info(self, _func: Callable, type_: str) -> Any:
         # If func is partial function.
@@ -168,11 +164,6 @@ class TimeoutSampler:
                 last_exp = exp
                 elapsed_time = self.wait_timeout - timeout_watch.remaining_time()
 
-                if self._should_raise_on_exception(exp=last_exp):
-                    raise TimeoutExpiredError(
-                        self._get_exception_log(exp=last_exp), last_exp=last_exp, elapsed_time=elapsed_time
-                    )
-
                 if not self._should_ignore_exception(exp=last_exp):
                     raise TimeoutExpiredError(
                         self._get_exception_log(exp=last_exp), last_exp=last_exp, elapsed_time=elapsed_time
@@ -205,23 +196,6 @@ class TimeoutSampler:
 
         # Prevent match if provided with empty string
         return any(msg and msg in str(exp) for msg in exception_messages)
-
-    def _should_raise_on_exception(self, exp: Exception) -> bool:
-        """
-        Check if exception should be raised during execution of `func` by exceptions that
-        sent by the user (self.raise_on_exceptions)
-        """
-        for entry in self.raise_on_exceptions:
-            if isinstance(exp, entry):  # Check inheritance for raised exception
-                exception_messages = self.raise_on_exceptions.get(entry, [])
-
-                if not exception_messages:
-                    return True
-
-                if self._is_exception_matched(exp=exp, exception_messages=exception_messages):
-                    return True
-
-        return False
 
     def _should_ignore_exception(self, exp: Exception) -> bool:
         """
@@ -285,7 +259,6 @@ def retry(
     exceptions_dict: dict[type[Exception], list[str]] | None = None,
     print_log: bool = True,
     print_func_log: bool = True,
-    raise_on_exceptions: dict[type[Exception], list[str]] | None = None,
 ) -> Callable:
     """
     Decorator for TimeoutSampler, For usage see TimeoutSampler.
@@ -308,7 +281,6 @@ def retry(
                 print_log=print_log,
                 print_func_log=print_func_log,
                 func_args=args,
-                raise_on_exceptions=raise_on_exceptions,
                 **kwargs,
             ):
                 if sample:

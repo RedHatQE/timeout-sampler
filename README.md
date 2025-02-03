@@ -72,40 +72,6 @@ for sample in TimeoutSampler(
     if sample:
         return
 
-# Raise TimeoutExpiredError immediately since TypeError was raised
-for sample in TimeoutSampler(
-    wait_timeout=1,
-    sleep=1,
-    func=raise_value_error,
-    raise_on_exceptions={TypeError: []},
-    start="1",
-    end="10",
-):
-    if sample:
-        return
-# Raise TimeoutExpiredError immediately since TypeError with matching error was raised
-for sample in TimeoutSampler(
-    wait_timeout=1,
-    sleep=1,
-    func=raise_value_error,
-    raise_on_exceptions={TypeError: ["Start and end must be int type"]},
-    start="1",
-    end="10",
-):
-    if sample:
-        return
-
-# Raise TimeoutExpiredError after timeout since TypeError error do not match the error in exceptions_dict
-for sample in TimeoutSampler(
-    wait_timeout=1,
-    sleep=1,
-    func=raise_value_error,
-    raise_on_exceptions={TypeError: ["Some other error"]},
-    start="1",
-    end="10",
-):
-    if sample:
-        return
 
 # Use as decorator. (Any argument that TimeoutSampler accepts will be passed to the decorated function)
 from timeout_sampler import retry
