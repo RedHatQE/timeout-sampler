@@ -27,7 +27,7 @@ dev-dependencies = [ "ipdb>=0.13.13", "ipython>=8.18.1" ]
 
 [project]
 name = "timeout-sampler"
-version = "1.0.11"
+version = "1.0.12"
 description = "Timeout utility class to wait for any function output and interact with it in given time"
 license = "Apache-2.0"
 readme = "README.md"
