@@ -100,7 +100,7 @@ class TimeoutSampler:
         self.func_kwargs = func_kwargs or {}
         self.print_log = print_log
         self.print_func_log = print_func_log
-        self.exceptions_dict = exceptions_dict or {Exception: []}
+        self.exceptions_dict = exceptions_dict if exceptions_dict is not None else {Exception: []}
 
     def _get_func_info(self, _func: Callable, type_: str) -> Any:
         # If func is partial function.

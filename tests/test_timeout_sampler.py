@@ -36,6 +36,13 @@ class TestTimeoutSampler:
             ),
             pytest.param(
                 {
+                    "init_exceptions_dict": {},
+                    "runtime_exception": ValueError(),
+                },
+                id="init_any_exception_raise_valueerror_with_no_msg",
+            ),
+            pytest.param(
+                {
                     "init_exceptions_dict": {
                         ValueError: ["allowed exception text"],
                     },
