@@ -80,8 +80,8 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "decorator" },
     { name = "ipython", version = "8.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
-    { name = "ipython", version = "8.33.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
-    { name = "ipython", version = "9.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "ipython", version = "8.34.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
+    { name = "ipython", version = "9.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/3d/1b/7e07e7b752017f7693a0f4d41c13e5ca29ce8cbcfdcc1fd6c4ad8c0a27a0/ipdb-0.13.13.tar.gz", hash = "sha256:e3ac6018ef05126d442af680aad863006ec19d02290561ac88b8b1c0b0cfc726", size = 17042 }
@@ -116,7 +116,7 @@ wheels = [
 
 [[package]]
 name = "ipython"
-version = "8.33.0"
+version = "8.34.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "python_full_version == '3.10.*'",
@@ -134,14 +134,14 @@ dependencies = [
     { name = "traitlets", marker = "python_full_version == '3.10.*'" },
     { name = "typing-extensions", marker = "python_full_version == '3.10.*'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/99/5d/27844489a849a9ceb94ea59c1adac9323fb77175a3076742ed76dcc87f07/ipython-8.33.0.tar.gz", hash = "sha256:4c3e36a6dfa9e8e3702bd46f3df668624c975a22ff340e96ea7277afbd76217d", size = 5508284 }
+sdist = { url = "https://files.pythonhosted.org/packages/13/18/1a60aa62e9d272fcd7e658a89e1c148da10e1a5d38edcbcd834b52ca7492/ipython-8.34.0.tar.gz", hash = "sha256:c31d658e754673ecc6514583e7dda8069e47136eb62458816b7d1e6625948b5a", size = 5508477 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/13/e7/7b144d0c3a16f56b213b2d9f9bee22e50f6e54265a551db9f43f09e2c084/ipython-8.33.0-py3-none-any.whl", hash = "sha256:aa5b301dfe1eaf0167ff3238a6825f810a029c9dad9d3f1597f30bd5ff65cc44", size = 826720 },
+    { url = "https://files.pythonhosted.org/packages/04/78/45615356bb973904856808183ae2a5fba1f360e9d682314d79766f4b88f2/ipython-8.34.0-py3-none-any.whl", hash = "sha256:0419883fa46e0baa182c5d50ebb8d6b49df1889fdb70750ad6d8cfe678eda6e3", size = 826731 },
 ]
 
 [[package]]
 name = "ipython"
-version = "9.0.0"
+version = "9.0.2"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "python_full_version >= '3.11'",
@@ -159,9 +159,9 @@ dependencies = [
     { name = "traitlets", marker = "python_full_version >= '3.11'" },
     { name = "typing-extensions", marker = "python_full_version == '3.11.*'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/de/39/264894738a202ddaf6abae39b3f84671ddee23fd292dbb3e10039e70300c/ipython-9.0.0.tar.gz", hash = "sha256:9368d65b3d4a471e9a698fed3ea486bbf6737e45111e915279c971b77f974397", size = 4364165 }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/ce/012a0f40ca58a966f87a6e894d6828e2817657cbdf522b02a5d3a87d92ce/ipython-9.0.2.tar.gz", hash = "sha256:ec7b479e3e5656bf4f58c652c120494df1820f4f28f522fb7ca09e213c2aab52", size = 4366102 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/85/a1/894e4c0b6ac994045c6edeb2b6fdf69c59f20fcd2e348a42f4e40889181c/ipython-9.0.0-py3-none-any.whl", hash = "sha256:2cce23069b830a54a5b9d3d66ccd6433047c1503a7b9a3b34593c0b5c2c08477", size = 592040 },
+    { url = "https://files.pythonhosted.org/packages/20/3a/917cb9e72f4e1a4ea13c862533205ae1319bd664119189ee5cc9e4e95ebf/ipython-9.0.2-py3-none-any.whl", hash = "sha256:143ef3ea6fb1e1bffb4c74b114051de653ffb7737a3f7ab1670e657ca6ae8c44", size = 600524 },
 ]
 
 [[package]]
@@ -297,12 +297,12 @@ wheels = [
 
 [[package]]
 name = "python-simple-logger"
-version = "2.0.7"
+version = "2.0.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorlog" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0c/45/c4098a105bb1b3151b82e4d364d58b4559e1f0bf994f0f72d9147d6a65d6/python_simple_logger-2.0.7.tar.gz", hash = "sha256:aae25a76ebd40e8a0bf96bcd001e5ae52190bc7bb467f1c549df3a65ceabaee8", size = 9412 }
+sdist = { url = "https://files.pythonhosted.org/packages/3d/b2/e0f8c4440135b9a4e61d12eee8f13f4a404718f9ab138de0406613f78f38/python_simple_logger-2.0.8.tar.gz", hash = "sha256:64178d2eaa7e50354b2bc0fb3e36347d24f790156e10f19595e26abfd055631d", size = 9413 }
 
 [[package]]
 name = "stack-data"
@@ -320,7 +320,7 @@ wheels = [
 
 [[package]]
 name = "timeout-sampler"
-version = "1.0.11"
+version = "1.0.12"
 source = { editable = "." }
 dependencies = [
     { name = "pytest" },
@@ -331,8 +331,8 @@ dependencies = [
 dev = [
     { name = "ipdb" },
     { name = "ipython", version = "8.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
-    { name = "ipython", version = "8.33.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
-    { name = "ipython", version = "9.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "ipython", version = "8.34.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
+    { name = "ipython", version = "9.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 
 [package.metadata]
