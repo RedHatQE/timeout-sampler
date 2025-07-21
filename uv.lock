@@ -51,7 +51,7 @@ name = "exceptiongroup"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0b/9f/a65090624ecf468cdca03533906e7c69ed7588582240cfe7cc9e770b50eb/exceptiongroup-1.3.0.tar.gz", hash = "sha256:b241f5885f560bc56a59ee63ca4c6a8bfa46ae4ad651af316d4e81817bb9fd88", size = 29749, upload-time = "2025-05-10T17:42:51.123Z" }
 wheels = [
@@ -301,12 +301,12 @@ wheels = [
 
 [[package]]
 name = "python-simple-logger"
-version = "2.0.14"
+version = "2.0.15"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorlog" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/82/05/b94f4e454c842521f6f1c9f53b728588c01cd297c8d37bb1b5cce496764c/python_simple_logger-2.0.14.tar.gz", hash = "sha256:1fa30c1929ab73a2b1f0fb701dc426b960785962224d386bec370cd77ee3f29f", size = 9449, upload-time = "2025-07-06T11:36:32.348Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/9b/cd44e8a5000c0de82078723483f605d2b629cfb081b5251e2f8eabe18ce9/python_simple_logger-2.0.15.tar.gz", hash = "sha256:0a8d355e0e91c363e649fe37bda2fad9d5d13dde18c029a7a030c97e796a9ca9", size = 9451, upload-time = "2025-07-20T08:21:25.205Z" }
 
 [[package]]
 name = "stack-data"
