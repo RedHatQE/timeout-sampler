@@ -80,6 +80,7 @@ class TimeoutSampler:
         exceptions_dict (dict): Exception handling definition, only exception that specifically raised in exceptions_dict will be ignored
         print_log (bool): Print elapsed time to log.
         print_func_log (bool): Add function call info to log
+        print_func_args (bool): Include function arguments in log when print_func_log is True
     """
 
     def __init__(
@@ -90,6 +91,7 @@ class TimeoutSampler:
         exceptions_dict: dict[type[Exception], list[str]] | None = None,
         print_log: bool = True,
         print_func_log: bool = True,
+        print_func_args: bool = True,
         func_args: tuple[Any] | None = None,
         **func_kwargs: Any,
     ):
@@ -100,6 +102,7 @@ class TimeoutSampler:
         self.func_kwargs = func_kwargs or {}
         self.print_log = print_log
         self.print_func_log = print_func_log
+        self.print_func_args = print_func_args
         self.exceptions_dict = exceptions_dict if exceptions_dict is not None else {Exception: []}
 
     def _get_func_info(self, _func: Callable, type_: str) -> Any:
@@ -122,8 +125,8 @@ class TimeoutSampler:
 
     @property
     def _func_log(self) -> str:
-        _func_kwargs = f"Kwargs: {self.func_kwargs}" if self.func_kwargs else ""
-        _func_args = f"Args: {self.func_args}" if self.func_args else ""
+        _func_kwargs = f"Kwargs: {self.func_kwargs}" if (self.print_func_args and self.func_kwargs) else ""
+        _func_args = f"Args: {self.func_args}" if (self.print_func_args and self.func_args) else ""
         _func_module = self._get_func_info(_func=self.func, type_="__module__")
         _func_name = self._get_func_info(_func=self.func, type_="__name__")
         return f"Function: {_func_module}.{_func_name} {_func_args} {_func_kwargs}".strip()
@@ -259,6 +262,7 @@ def retry(
     exceptions_dict: dict[type[Exception], list[str]] | None = None,
     print_log: bool = True,
     print_func_log: bool = True,
+    print_func_args: bool = True,
 ) -> Callable:
     """
     Decorator for TimeoutSampler, For usage see TimeoutSampler.
@@ -280,6 +284,7 @@ def retry(
                 exceptions_dict=exceptions_dict,
                 print_log=print_log,
                 print_func_log=print_func_log,
+                print_func_args=print_func_args,
                 func_args=args,
                 **kwargs,
             ):
