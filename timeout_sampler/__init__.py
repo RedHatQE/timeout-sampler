@@ -163,7 +163,7 @@ class TimeoutSampler:
                 time.sleep(self.sleep)
                 elapsed_time = None
 
-            except Exception as exp:
+            except Exception as exp:  # noqa: BLE001
                 last_exp = exp
                 elapsed_time = self.wait_timeout - timeout_watch.remaining_time()
 
