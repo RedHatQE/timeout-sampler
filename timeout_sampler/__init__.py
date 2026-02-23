@@ -85,7 +85,7 @@ class TimeoutSampler:
 
     def __init__(
         self,
-        wait_timeout: int | float,
+        wait_timeout: float,
         sleep: int,
         func: Callable,
         exceptions_dict: dict[type[Exception], list[str]] | None = None,
@@ -244,7 +244,7 @@ class TimeoutWatch:
     of a given interval
     """
 
-    def __init__(self, timeout: int | float) -> None:
+    def __init__(self, timeout: float) -> None:
         self.timeout = timeout
         self.start_time = time.time()
 
@@ -253,7 +253,7 @@ class TimeoutWatch:
         Return the remaining part of timeout since the object was created.
         """
         _remaining_time = self.start_time + self.timeout - time.time()
-        return _remaining_time if _remaining_time > 0 else 0
+        return max(0, _remaining_time)
 
 
 def retry(
