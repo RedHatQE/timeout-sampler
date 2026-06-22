@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import datetime
 import time
-from typing import Any, Callable
+from typing import Any, Callable, Union
 
 from simple_logger.logger import get_logger
 
 LOGGER = get_logger(name=__name__)
 
-ExceptionFilter = str | Callable[[Exception], bool]
+ExceptionFilter = Union[str, Callable[[Exception], bool]]
 ExceptionsDict = dict[type[Exception], list[ExceptionFilter]]
 
 
