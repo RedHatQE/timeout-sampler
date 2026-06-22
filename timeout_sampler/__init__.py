@@ -8,6 +8,9 @@ from simple_logger.logger import get_logger
 
 LOGGER = get_logger(name=__name__)
 
+ExceptionFilter = str | Callable[[Exception], bool]
+ExceptionsDict = dict[type[Exception], list[ExceptionFilter]]
+
 
 def _elapsed_time_log(elapsed_time: float) -> str:
     return f"Elapsed time: {elapsed_time} [{datetime.timedelta(seconds=elapsed_time)}]"
@@ -92,7 +95,7 @@ class TimeoutSampler:
         wait_timeout: float,
         sleep: int,
         func: Callable,
-        exceptions_dict: dict[type[Exception], list[str | Callable[[Exception], bool]]] | None = None,
+        exceptions_dict: ExceptionsDict | None = None,
         print_log: bool = True,
         print_func_log: bool = True,
         print_func_args: bool = True,
@@ -108,6 +111,17 @@ class TimeoutSampler:
         self.print_func_log = print_func_log
         self.print_func_args = print_func_args
         self.exceptions_dict = exceptions_dict if exceptions_dict is not None else {Exception: []}
+        self._validate_exception_filters()
+
+    def _validate_exception_filters(self) -> None:
+        for exception_class, filters in self.exceptions_dict.items():
+            for filter_item in filters:
+                if isinstance(filter_item, type):
+                    raise TypeError(
+                        f"exceptions_dict filter for {exception_class.__name__} contains a class "
+                        f"({filter_item.__name__}) instead of a callable or string. "
+                        f"Use a lambda (e.g., lambda exc: exc.status >= 500) instead."
+                    )
 
     def _get_func_info(self, _func: Callable, type_: str) -> Any:
         # If func is partial function.
@@ -186,23 +200,34 @@ class TimeoutSampler:
         raise TimeoutExpiredError(self._get_exception_log(exp=last_exp), last_exp=last_exp)
 
     @staticmethod
-    def _is_exception_matched(exp: Exception, exception_messages: list[str | Callable[[Exception], bool]]) -> bool:
+    def _is_exception_matched(exp: Exception, exception_messages: list[ExceptionFilter]) -> bool:
         """
-        Verify whether exception text is allowed and should be raised
+        Verify whether exception should be ignored during retry.
 
         Args:
             exp (Exception): Exception object raised by `func`
-            exception_messages (list): Either an empty list allowing all text,
-                a list of strings to match against the exception text,
-                or callables that receive the exception and return True to ignore.
+            exception_messages (list): Either an empty list allowing all exceptions,
+                a list of strings to match against str(exception),
+                or callables that receive the exception and return a truthy value to ignore.
+                Callable filters that raise are silently skipped (treated as non-matching).
 
         Returns:
-            bool: True if exception text is allowed or no exception text given, False otherwise
+            bool: True if exception should be ignored (retry), False otherwise
         """
         if not exception_messages:
             return True
 
-        return any(msg(exp) if callable(msg) else (msg and msg in str(exp)) for msg in exception_messages)
+        for msg in exception_messages:
+            if callable(msg):
+                try:
+                    if msg(exp):
+                        return True
+                except Exception as filter_error:  # noqa: BLE001
+                    LOGGER.warning(f"Callable filter raised {filter_error!r}, treating as non-matching")
+                    continue
+            elif msg in str(exp):
+                return True
+        return False
 
     def _should_ignore_exception(self, exp: Exception) -> bool:
         """
@@ -263,7 +288,7 @@ class TimeoutWatch:
 def retry(
     wait_timeout: int,
     sleep: int,
-    exceptions_dict: dict[type[Exception], list[str | Callable[[Exception], bool]]] | None = None,
+    exceptions_dict: ExceptionsDict | None = None,
     print_log: bool = True,
     print_func_log: bool = True,
     print_func_args: bool = True,

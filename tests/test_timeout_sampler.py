@@ -211,20 +211,45 @@ class TestCallableExceptionFilter:
     def _raise_status_error(status: int):
         raise StatusError(status=status)
 
-    def test_callable_filter_ignores_matching_exception(self):
-        """Callable returning True should ignore the exception and allow retry."""
+    @pytest.mark.parametrize(
+        "exceptions_dict, status",
+        [
+            pytest.param(
+                {StatusError: [lambda exc: exc.status >= 500]},
+                502,
+                id="test_callable_filter_ignores_matching_5xx",
+            ),
+            pytest.param(
+                {StatusError: ["999", lambda exc: exc.status >= 500]},
+                503,
+                id="test_callable_and_string_filters_combined",
+            ),
+            pytest.param(
+                {StatusError: ["502"]},
+                502,
+                id="test_string_filter_still_works",
+            ),
+            pytest.param(
+                {StatusError: []},
+                400,
+                id="test_empty_list_still_matches_all",
+            ),
+        ],
+    )
+    def test_callable_filter_retries_until_timeout(self, exceptions_dict, status):
+        """Exception matching the filter should be ignored, retrying until timeout."""
         with pytest.raises(TimeoutExpiredError):
             for _ in TimeoutSampler(
                 wait_timeout=1,
                 sleep=1,
                 func=self._raise_status_error,
-                exceptions_dict={StatusError: [lambda exc: exc.status >= 500]},
+                exceptions_dict=exceptions_dict,
                 print_log=False,
-                status=502,
+                status=status,
             ):
                 continue
 
-    def test_callable_filter_raises_non_matching_exception(self):
+    def test_callable_filter_reraises_when_not_matched(self):
         """Callable returning False should re-raise the exception immediately."""
         with pytest.raises(TimeoutExpiredError) as exc_info:
             for _ in TimeoutSampler(
@@ -239,41 +264,29 @@ class TestCallableExceptionFilter:
         assert exc_info.value.last_exp is not None
         assert exc_info.value.last_exp.status == 400
 
-    def test_callable_filter_with_string_filter_combined(self):
-        """Callable and string filters can coexist in the same list."""
-        with pytest.raises(TimeoutExpiredError):
+    def test_callable_filter_skips_on_attribute_error(self):
+        """Callable that raises (e.g. missing attribute) is skipped, not propagated."""
+        with pytest.raises(TimeoutExpiredError) as exc_info:
             for _ in TimeoutSampler(
                 wait_timeout=1,
                 sleep=1,
                 func=self._raise_status_error,
-                exceptions_dict={StatusError: ["999", lambda exc: exc.status >= 500]},
-                print_log=False,
-                status=503,
-            ):
-                continue
-
-    def test_string_filter_still_works(self):
-        """Existing string matching behavior is unchanged."""
-        with pytest.raises(TimeoutExpiredError):
-            for _ in TimeoutSampler(
-                wait_timeout=1,
-                sleep=1,
-                func=self._raise_status_error,
-                exceptions_dict={StatusError: ["502"]},
+                exceptions_dict={StatusError: [lambda exc: exc.no_such_attr >= 500]},
                 print_log=False,
                 status=502,
             ):
                 continue
+        assert exc_info.value.last_exp is not None
+        assert exc_info.value.last_exp.status == 502
 
-    def test_empty_list_still_matches_all(self):
-        """Empty list continues to match all exceptions of the given type."""
-        with pytest.raises(TimeoutExpiredError):
-            for _ in TimeoutSampler(
+    def test_class_passed_as_filter_raises_type_error(self):
+        """Passing an exception class instead of a callable should raise TypeError at init."""
+        with pytest.raises(TypeError, match="contains a class.*instead of a callable"):
+            TimeoutSampler(
                 wait_timeout=1,
                 sleep=1,
                 func=self._raise_status_error,
-                exceptions_dict={StatusError: []},
+                exceptions_dict={StatusError: [ValueError]},
                 print_log=False,
-                status=400,
-            ):
-                continue
+                status=502,
+            )
