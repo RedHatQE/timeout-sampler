@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Exception Matching Works - timeout-sampler</title>
+    <meta name="description" content="Poll any function until it succeeds or times out, with fine-grained exception handling">
+    <link rel="stylesheet" href="assets/style.css">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
+    <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
+    <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
+</head>
+<body>
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <a href="index.html" class="sidebar-logo">timeout-sampler</a>
+            <p class="sidebar-tagline">Poll any function until it succeeds or times out, with fine-grained exception handling</p>
+        </div>
+
+        <div class="sidebar-search">
+            <input type="text" id="search-input" placeholder="Search... (⌘K)" autocomplete="off" readonly>
+            <div id="search-results" class="search-results"></div>
+        </div>
+
+        <nav class="sidebar-nav">
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Getting Started</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="quickstart.html"
+                           class="nav-link">
+                            Getting Started with timeout-sampler
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">User Guides</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="polling-with-timeout-sampler.html"
+                           class="nav-link">
+                            Polling a Function with TimeoutSampler
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="using-the-retry-decorator.html"
+                           class="nav-link">
+                            Retrying Functions with the @retry Decorator
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="handling-exceptions.html"
+                           class="nav-link">
+                            Filtering and Handling Exceptions
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="controlling-logging.html"
+                           class="nav-link">
+                            Controlling Log Output
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="tracking-elapsed-time.html"
+                           class="nav-link">
+                            Tracking Elapsed Time with TimeoutWatch
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Recipes</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="common-polling-patterns.html"
+                           class="nav-link">
+                            Common Polling Patterns
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Reference</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="api-timeout-sampler.html"
+                           class="nav-link">
+                            TimeoutSampler API
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="api-retry-decorator.html"
+                           class="nav-link">
+                            @retry Decorator API
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="api-timeout-watch.html"
+                           class="nav-link">
+                            TimeoutWatch API
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="api-exceptions.html"
+                           class="nav-link">
+                            TimeoutExpiredError Reference
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Internals</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="exception-matching-logic.html"
+                           class="nav-link active" aria-current="page">
+                            How Exception Matching Works
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+        </nav>
+    </aside>
+
+    <div class="main-wrapper">
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar" aria-expanded="false">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <a href="index.html" class="top-bar-title">timeout-sampler</a>
+            </div>
+            <div class="top-bar-spacer"></div>
+            <div class="top-bar-right">
+                <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
+                    <kbd>&#8984;K</kbd> Search
+                </button>
+                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
+                    ⚡ docs<span class="brand-accent">fy</span>
+                </a>
+
+                <a href="https://github.com/RedHatQE/timeout-sampler" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/timeout-sampler">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
+                </a>
+
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                    <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                    <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <main class="content">
+
+            <article class="article">
+                <div class="article-body">
+                    <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
+                         converted to HTML server-side by the markdown library, not
+                         user-supplied input. XSS risk is minimal and accepted since
+                         the AI generates the content, not end users. -->
+                    <h1 id="how-exception-matching-works">How Exception Matching Works</h1>
+<p>When your polled function raises an exception inside a <code>TimeoutSampler</code> loop, the sampler must decide: <em>should it swallow the error and keep retrying, or should it stop immediately?</em> This decision is made by the <strong>exception matching algorithm</strong> — an inheritance-aware, message-filtered check that gives you precise control over which failures are retried and which are surfaced right away.</p>
+<p>Understanding this algorithm helps you avoid two common pitfalls: accidentally retrying an exception you should have surfaced (hiding real bugs), or accidentally re-raising a transient error you meant to ignore (breaking your polling loop too early).</p>
+<h2 id="the-big-picture">The Big Picture</h2>
+<p>Every time an exception is raised inside the function passed to <code>TimeoutSampler</code>, the sampler runs through a two-stage decision process:</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>What It Checks</th>
+<th>Outcome</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1. Type matching</strong></td>
+<td>Is the raised exception an instance of any class listed in <code>exceptions_dict</code>? This uses Python's <code>isinstance()</code>, so subclass relationships are honored.</td>
+<td>If no match → <strong>re-raise immediately</strong></td>
+</tr>
+<tr>
+<td><strong>2. Message filtering</strong></td>
+<td>Does the exception's string representation contain at least one of the allowed message substrings for the matched class?</td>
+<td>If match → <strong>ignore and retry</strong>; if no message match → <strong>re-raise immediately</strong></td>
+</tr>
+</tbody>
+</table>
+<p>If the exception passes both stages, the sampler sleeps and calls the function again. If it fails either stage, the sampler wraps the original exception in a <code>TimeoutExpiredError</code> and raises it.</p>
+<h2 id="the-three-outcome-categories">The Three Outcome Categories</h2>
+<p>When an exception is raised inside your polled function, exactly one of these three things happens:</p>
+<h3 id="1-exact-class-match-continue-polling">1. Exact Class Match — Continue Polling</h3>
+<p>The raised exception's class is explicitly listed as a key in <code>exceptions_dict</code>, and the message filter passes (or is empty).</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeoutSampler</span>
+
+<span class="c1"># ValueError is explicitly listed, empty list means &quot;match any message&quot;</span>
+<span class="n">exceptions_dict</span> <span class="o">=</span> <span class="p">{</span><span class="ne">ValueError</span><span class="p">:</span> <span class="p">[]}</span>
+
+<span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
+    <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="n">sleep</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">func</span><span class="o">=</span><span class="n">might_raise_value_error</span><span class="p">,</span>
+    <span class="n">exceptions_dict</span><span class="o">=</span><span class="n">exceptions_dict</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+        <span class="k">break</span>
+<span class="c1"># Any ValueError is silently retried until timeout</span>
+</code></pre></div>
+
+<h3 id="2-inherited-class-match-continue-polling">2. Inherited Class Match — Continue Polling</h3>
+<p>The raised exception is a <em>subclass</em> of a class listed in <code>exceptions_dict</code>. The sampler uses <code>isinstance()</code> internally, so the full inheritance chain is checked.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Imagine this hierarchy:</span>
+<span class="c1"># class AExampleError(Exception): ...</span>
+<span class="c1"># class BExampleError(AExampleError): ...</span>
+
+<span class="n">exceptions_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">AExampleError</span><span class="p">:</span> <span class="p">[]}</span>
+
+<span class="c1"># If the function raises BExampleError, it still matches</span>
+<span class="c1"># because isinstance(BExampleError(), AExampleError) is True</span>
+</code></pre></div>
+
+<h3 id="3-no-match-re-raise-immediately">3. No Match — Re-raise Immediately</h3>
+<p>The raised exception is neither listed in <code>exceptions_dict</code> nor a subclass of any listed class. The sampler wraps it in a <code>TimeoutExpiredError</code> and re-raises immediately — it does <em>not</em> wait for the timeout to expire.</p>
+<div class="highlight"><pre><span></span><code><span class="n">exceptions_dict</span> <span class="o">=</span> <span class="p">{</span><span class="ne">ValueError</span><span class="p">:</span> <span class="p">[]}</span>
+
+<span class="c1"># If the function raises KeyError, it does NOT match ValueError</span>
+<span class="c1"># and is NOT a subclass of ValueError → re-raised immediately</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Warning:</strong> If you pass an empty <code>exceptions_dict</code> (<code>{}</code>), <strong>no exceptions will be matched</strong>, so <em>every</em> exception will cause an immediate re-raise. This is different from the default behavior (see below).</p>
+</blockquote>
+<h2 id="how-message-filtering-works">How Message Filtering Works</h2>
+<p>Each key in <code>exceptions_dict</code> maps to a list of allowed message substrings. The message filter runs <em>after</em> the type match succeeds:</p>
+<table>
+<thead>
+<tr>
+<th><code>exception_messages</code> value</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>[]</code> (empty list)</td>
+<td><strong>All messages match.</strong> Any exception of this type is ignored.</td>
+</tr>
+<tr>
+<td><code>["connection refused", "timeout"]</code></td>
+<td>The exception's <code>str()</code> representation must contain at least one of these substrings.</td>
+</tr>
+<tr>
+<td><code>[""]</code> (list with empty string)</td>
+<td><strong>Nothing matches.</strong> An empty string is explicitly excluded as a safeguard.</td>
+</tr>
+</tbody>
+</table>
+<p>The matching logic is a substring check using Python's <code>in</code> operator:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Internal logic (simplified):</span>
+<span class="nb">any</span><span class="p">(</span><span class="n">msg</span> <span class="ow">and</span> <span class="n">msg</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">exp</span><span class="p">)</span> <span class="k">for</span> <span class="n">msg</span> <span class="ow">in</span> <span class="n">exception_messages</span><span class="p">)</span>
+</code></pre></div>
+
+<h3 id="message-filtering-examples">Message Filtering Examples</h3>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeoutSampler</span>
+
+<span class="c1"># Match only ConnectionError with &quot;refused&quot; in the message</span>
+<span class="n">exceptions_dict</span> <span class="o">=</span> <span class="p">{</span><span class="ne">ConnectionError</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;refused&quot;</span><span class="p">]}</span>
+
+<span class="c1"># ✅ ConnectionError(&quot;Connection refused by host&quot;)  → retried (contains &quot;refused&quot;)</span>
+<span class="c1"># ❌ ConnectionError(&quot;DNS resolution failed&quot;)       → re-raised (no substring match)</span>
+<span class="c1"># ❌ ValueError(&quot;Connection refused&quot;)               → re-raised (wrong type)</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code><span class="c1"># Match ValueError with ANY of several messages</span>
+<span class="n">exceptions_dict</span> <span class="o">=</span> <span class="p">{</span><span class="ne">ValueError</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;not ready&quot;</span><span class="p">,</span> <span class="s2">&quot;still loading&quot;</span><span class="p">]}</span>
+
+<span class="c1"># ✅ ValueError(&quot;Resource not ready&quot;)     → retried</span>
+<span class="c1"># ✅ ValueError(&quot;Page still loading&quot;)     → retried</span>
+<span class="c1"># ❌ ValueError(&quot;Invalid input&quot;)          → re-raised</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Tip:</strong> Message filters are case-sensitive. <code>"Refused"</code> will not match an exception with the message <code>"connection refused"</code>. Choose your substrings carefully.</p>
+</blockquote>
+<h2 id="the-default-exceptions_dict">The Default <code>exceptions_dict</code></h2>
+<p>If you do not pass an <code>exceptions_dict</code> to <code>TimeoutSampler</code>, the default value is:</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="ne">Exception</span><span class="p">:</span> <span class="p">[]}</span>
+</code></pre></div>
+
+<p>Since every exception in Python inherits from <code>Exception</code>, this means <strong>all exceptions are silently retried</strong> until the timeout expires. This is the most permissive setting.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># These two are equivalent:</span>
+<span class="n">TimeoutSampler</span><span class="p">(</span><span class="n">wait_timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">sleep</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">func</span><span class="o">=</span><span class="n">my_func</span><span class="p">)</span>
+<span class="n">TimeoutSampler</span><span class="p">(</span><span class="n">wait_timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">sleep</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">func</span><span class="o">=</span><span class="n">my_func</span><span class="p">,</span> <span class="n">exceptions_dict</span><span class="o">=</span><span class="p">{</span><span class="ne">Exception</span><span class="p">:</span> <span class="p">[]})</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Note:</strong> The <code>@retry</code> decorator also defaults to <code>{Exception: []}</code> when <code>exceptions_dict</code> is not specified. See <a href="api-retry-decorator.html">@retry Decorator API</a> for the full parameter list.</p>
+</blockquote>
+<h2 id="step-by-step-what-happens-when-an-exception-is-raised">Step-by-Step: What Happens When an Exception Is Raised</h2>
+<ol>
+<li>Your function (<code>func</code>) raises an exception <code>exp</code>.</li>
+<li>The sampler records <code>exp</code> as <code>last_exp</code> and calculates <code>elapsed_time</code>.</li>
+<li>The sampler calls <code>_should_ignore_exception(exp)</code>, which iterates over every key in <code>exceptions_dict</code>:</li>
+<li>For each key class, it checks <code>isinstance(exp, key)</code>.</li>
+<li>On the first type match, it retrieves the message list and calls <code>_is_exception_matched(exp, messages)</code>.</li>
+<li>
+<p>If both type and message match → return <code>True</code> (ignore the exception).</p>
+</li>
+<li>
+<p><strong>If ignored:</strong> the sampler sleeps for <code>sleep</code> seconds, then calls <code>func</code> again.</p>
+</li>
+<li><strong>If not ignored:</strong> the sampler raises <code>TimeoutExpiredError</code>, attaching <code>exp</code> as <code>last_exp</code> and the current <code>elapsed_time</code>.</li>
+</ol>
+<blockquote>
+<p><strong>Note:</strong> When an exception is not matched, the <code>TimeoutExpiredError</code> is raised <strong>immediately</strong> — the sampler does not wait for the full timeout to expire. This means unrecognized exceptions surface fast.</p>
+</blockquote>
+<h2 id="multiple-exception-classes">Multiple Exception Classes</h2>
+<p>You can list multiple exception classes in <code>exceptions_dict</code>. The sampler checks them in iteration order:</p>
+<div class="highlight"><pre><span></span><code><span class="n">exceptions_dict</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="ne">ConnectionError</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;refused&quot;</span><span class="p">,</span> <span class="s2">&quot;reset&quot;</span><span class="p">],</span>
+    <span class="ne">TimeoutError</span><span class="p">:</span> <span class="p">[],</span>
+    <span class="ne">ValueError</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;not ready&quot;</span><span class="p">],</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>The first matching class wins. Once a type match is found, only that class's message list is checked. If the message filter fails for that class, the exception is re-raised — the sampler does <strong>not</strong> continue checking other classes in the dict.</p>
+<blockquote>
+<p><strong>Warning:</strong> Because <code>isinstance()</code> honors inheritance, ordering can matter when your exception classes share a parent-child relationship. If both <code>AExampleError</code> and <code>BExampleError(AExampleError)</code> are in the dict, the one that appears first during iteration will be checked first. Place more specific (child) classes before more general (parent) classes to ensure the correct message filter is applied.</p>
+</blockquote>
+<h2 id="how-it-affects-timeoutexpirederror">How It Affects <code>TimeoutExpiredError</code></h2>
+<p>When an exception is re-raised (either immediately or at timeout expiry), it is wrapped in a <code>TimeoutExpiredError</code>. The original exception is accessible through the <code>last_exp</code> attribute:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeoutExpiredError</span><span class="p">,</span> <span class="n">TimeoutSampler</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
+        <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+        <span class="n">sleep</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">func</span><span class="o">=</span><span class="n">my_unstable_func</span><span class="p">,</span>
+        <span class="n">exceptions_dict</span><span class="o">=</span><span class="p">{</span><span class="ne">ConnectionError</span><span class="p">:</span> <span class="p">[]},</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+            <span class="k">break</span>
+<span class="k">except</span> <span class="n">TimeoutExpiredError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">last_exp</span><span class="p">)</span>       <span class="c1"># The original exception (e.g., ConnectionError)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">elapsed_time</span><span class="p">)</span>   <span class="c1"># Seconds elapsed before the error</span>
+</code></pre></div>
+
+<p>See <a href="api-exceptions.html">TimeoutExpiredError Reference</a> for the full attribute and method reference.</p>
+<h2 id="quick-reference-table">Quick Reference Table</h2>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th><code>exceptions_dict</code></th>
+<th>Raised Exception</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Default — catch all</td>
+<td><code>{Exception: []}</code></td>
+<td>Any exception</td>
+<td>Retry until timeout</td>
+</tr>
+<tr>
+<td>Specific type, any message</td>
+<td><code>{ValueError: []}</code></td>
+<td><code>ValueError("anything")</code></td>
+<td>Retry</td>
+</tr>
+<tr>
+<td>Specific type, filtered message</td>
+<td><code>{ValueError: ["not ready"]}</code></td>
+<td><code>ValueError("not ready yet")</code></td>
+<td>Retry</td>
+</tr>
+<tr>
+<td>Specific type, wrong message</td>
+<td><code>{ValueError: ["not ready"]}</code></td>
+<td><code>ValueError("bad input")</code></td>
+<td>Re-raise immediately</td>
+</tr>
+<tr>
+<td>Subclass match</td>
+<td><code>{Exception: []}</code></td>
+<td><code>ValueError()</code></td>
+<td>Retry (ValueError inherits Exception)</td>
+</tr>
+<tr>
+<td>Parent does not match child</td>
+<td><code>{ValueError: []}</code></td>
+<td><code>Exception()</code></td>
+<td>Re-raise immediately</td>
+</tr>
+<tr>
+<td>Empty dict — catch nothing</td>
+<td><code>{}</code></td>
+<td>Any exception</td>
+<td>Re-raise immediately</td>
+</tr>
+</tbody>
+</table>
+<h2 id="related-pages">Related Pages</h2>
+<ul>
+<li><a href="handling-exceptions.html">Filtering and Handling Exceptions</a> — practical guide to configuring <code>exceptions_dict</code> for common scenarios</li>
+<li><a href="api-timeout-sampler.html">TimeoutSampler API</a> — full constructor parameters and iteration behavior reference</li>
+<li><a href="api-exceptions.html">TimeoutExpiredError Reference</a> — attributes and string representation of the error raised on timeout or unmatched exceptions</li>
+<li><a href="api-retry-decorator.html">@retry Decorator API</a> — how <code>exceptions_dict</code> is passed through the decorator</li>
+<li><a href="common-polling-patterns.html">Common Polling Patterns</a> — copy-paste recipes combining exception filters with polling strategies</li>
+</ul>
+<h2 id="related-pages_1">Related Pages</h2>
+<ul>
+<li><a href="handling-exceptions.html">Filtering and Handling Exceptions</a></li>
+<li><a href="api-timeout-sampler.html">TimeoutSampler API</a></li>
+<li><a href="api-exceptions.html">TimeoutExpiredError Reference</a></li>
+<li><a href="api-retry-decorator.html">@retry Decorator API</a></li>
+<li><a href="common-polling-patterns.html">Common Polling Patterns</a></li>
+</ul>
+                </div>
+            </article>
+            <nav class="page-nav">
+
+                <a href="api-exceptions.html" class="page-nav-link page-nav-prev">
+                    <span class="page-nav-label">Previous</span>
+                    <span class="page-nav-title">TimeoutExpiredError Reference</span>
+                </a>
+
+
+                <div></div>
+
+            </nav>
+
+            <aside class="toc-sidebar">
+                <div class="toc-container">
+                    <h3>On this page</h3>
+                    <div class="toc">
+<ul>
+<li><a href="#the-big-picture">The Big Picture</a></li>
+<li><a href="#the-three-outcome-categories">The Three Outcome Categories</a><ul>
+<li><a href="#1-exact-class-match-continue-polling">1. Exact Class Match — Continue Polling</a></li>
+<li><a href="#2-inherited-class-match-continue-polling">2. Inherited Class Match — Continue Polling</a></li>
+<li><a href="#3-no-match-re-raise-immediately">3. No Match — Re-raise Immediately</a></li>
+</ul>
+</li>
+<li><a href="#how-message-filtering-works">How Message Filtering Works</a><ul>
+<li><a href="#message-filtering-examples">Message Filtering Examples</a></li>
+</ul>
+</li>
+<li><a href="#the-default-exceptions_dict">The Default exceptions_dict</a></li>
+<li><a href="#step-by-step-what-happens-when-an-exception-is-raised">Step-by-Step: What Happens When an Exception Is Raised</a></li>
+<li><a href="#multiple-exception-classes">Multiple Exception Classes</a></li>
+<li><a href="#how-it-affects-timeoutexpirederror">How It Affects TimeoutExpiredError</a></li>
+<li><a href="#quick-reference-table">Quick Reference Table</a></li>
+<li><a href="#related-pages">Related Pages</a></li>
+<li><a href="#related-pages_1">Related Pages</a></li>
+</ul>
+</div>
+
+                </div>
+            </aside>
+
+
+        </main>
+
+        <footer class="page-footer">
+
+            <span class="footer-version">Generated from version 1.0.22</span>
+            <span class="footer-sep">&middot;</span>
+
+            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
+        </footer>
+    </div>
+
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <script src="assets/theme.js"></script>
+    <script src="assets/search.js"></script>
+    <script src="assets/copy.js"></script>
+    <script src="assets/callouts.js"></script>
+    <script src="assets/scrollspy.js"></script>
+    <script src="assets/codelabels.js"></script>
+    <script src="assets/github.js"></script>
+    <script>
+(function() {
+    var toggle = document.getElementById('sidebar-toggle');
+    var sidebar = document.getElementById('sidebar');
+    var overlay = document.getElementById('sidebar-overlay');
+    if (toggle && sidebar) {
+        toggle.addEventListener('click', function() {
+            sidebar.classList.toggle('open');
+            if (overlay) overlay.classList.toggle('open');
+            var expanded = sidebar.classList.contains('open');
+            toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        });
+    }
+    if (overlay) {
+        overlay.addEventListener('click', function() {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        });
+    }
+})();
+</script>
+<script>
+(function() {
+    var sidebar = document.querySelector('.sidebar-nav') || document.querySelector('.sidebar');
+    if (!sidebar) return;
+
+    // Restore scroll position
+    var saved = sessionStorage.getItem('sidebar-scroll');
+    if (saved) sidebar.scrollTop = parseInt(saved, 10);
+
+    // Save scroll position before navigating
+    sidebar.addEventListener('scroll', function() {
+        sessionStorage.setItem('sidebar-scroll', sidebar.scrollTop.toString());
+    });
+
+    // Also scroll active link into view if no saved position
+    if (!saved) {
+        var active = sidebar.querySelector('.nav-link.active');
+        if (active) {
+            active.scrollIntoView({ block: 'center', behavior: 'instant' });
+        }
+    }
+})();
+</script>
+</body>
+</html>
