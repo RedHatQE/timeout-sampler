@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polling a Function with TimeoutSampler - timeout-sampler</title>
+    <meta name="description" content="Poll any function until it succeeds or times out, with fine-grained exception handling">
+    <link rel="stylesheet" href="assets/style.css">
+    <script>try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
+    <link rel="alternate" type="text/plain" title="LLM Documentation Index" href="llms.txt">
+    <link rel="alternate" type="text/plain" title="LLM Full Documentation" href="llms-full.txt">
+</head>
+<body>
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <a href="index.html" class="sidebar-logo">timeout-sampler</a>
+            <p class="sidebar-tagline">Poll any function until it succeeds or times out, with fine-grained exception handling</p>
+        </div>
+
+        <div class="sidebar-search">
+            <input type="text" id="search-input" placeholder="Search... (⌘K)" autocomplete="off" readonly>
+            <div id="search-results" class="search-results"></div>
+        </div>
+
+        <nav class="sidebar-nav">
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Getting Started</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="quickstart.html"
+                           class="nav-link">
+                            Getting Started with timeout-sampler
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">User Guides</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="polling-with-timeout-sampler.html"
+                           class="nav-link active" aria-current="page">
+                            Polling a Function with TimeoutSampler
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="using-the-retry-decorator.html"
+                           class="nav-link">
+                            Retrying Functions with the @retry Decorator
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="handling-exceptions.html"
+                           class="nav-link">
+                            Filtering and Handling Exceptions
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="controlling-logging.html"
+                           class="nav-link">
+                            Controlling Log Output
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="tracking-elapsed-time.html"
+                           class="nav-link">
+                            Tracking Elapsed Time with TimeoutWatch
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Recipes</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="common-polling-patterns.html"
+                           class="nav-link">
+                            Common Polling Patterns
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Reference</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="api-timeout-sampler.html"
+                           class="nav-link">
+                            TimeoutSampler API
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="api-retry-decorator.html"
+                           class="nav-link">
+                            @retry Decorator API
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="api-timeout-watch.html"
+                           class="nav-link">
+                            TimeoutWatch API
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="api-exceptions.html"
+                           class="nav-link">
+                            TimeoutExpiredError Reference
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <h3 class="nav-group-title">Internals</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="exception-matching-logic.html"
+                           class="nav-link">
+                            How Exception Matching Works
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
+        </nav>
+    </aside>
+
+    <div class="main-wrapper">
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar" aria-expanded="false">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <a href="index.html" class="top-bar-title">timeout-sampler</a>
+            </div>
+            <div class="top-bar-spacer"></div>
+            <div class="top-bar-right">
+                <button class="top-bar-search-btn" id="search-trigger" aria-label="Search">
+                    <kbd>&#8984;K</kbd> Search
+                </button>
+                <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener" class="docsfy-badge" title="Generated with docsfy">
+                    ⚡ docs<span class="brand-accent">fy</span>
+                </a>
+
+                <a href="https://github.com/RedHatQE/timeout-sampler" target="_blank" rel="noopener noreferrer" class="top-bar-github" id="github-link" data-repo-url="https://github.com/RedHatQE/timeout-sampler">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    <span class="github-stars" id="github-stars" title="GitHub stars"></span>
+                </a>
+
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                    <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                    <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <main class="content">
+
+            <article class="article">
+                <div class="article-body">
+                    <!-- SECURITY: |safe is intentional. Content is AI-generated markdown
+                         converted to HTML server-side by the markdown library, not
+                         user-supplied input. XSS risk is minimal and accepted since
+                         the AI generates the content, not end users. -->
+                    <h1 id="polling-a-function-with-timeoutsampler">Polling a Function with TimeoutSampler</h1>
+<p>Poll any callable at regular intervals, inspect each return value, and break out as soon as a success condition is met — all with a built-in timeout safety net.</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<ul>
+<li><code>timeout-sampler</code> installed in your project (see <a href="quickstart.html">Getting Started with timeout-sampler</a>)</li>
+</ul>
+<h2 id="quick-example">Quick Example</h2>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeoutSampler</span>
+
+<span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span><span class="n">wait_timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">sleep</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">func</span><span class="o">=</span><span class="n">my_check_function</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+        <span class="k">break</span>
+</code></pre></div>
+
+<p>This calls <code>my_check_function()</code> every 5 seconds for up to 30 seconds. As soon as it returns a truthy value, the loop breaks. If 30 seconds elapse without success, a <code>TimeoutExpiredError</code> is raised.</p>
+<h2 id="step-by-step-polling-until-a-condition-is-met">Step-by-Step: Polling Until a Condition Is Met</h2>
+<h3 id="1-import-timeoutsampler">1. Import <code>TimeoutSampler</code></h3>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeoutSampler</span>
+</code></pre></div>
+
+<h3 id="2-create-the-sampler-and-iterate">2. Create the sampler and iterate</h3>
+<p>Pass your function, a total timeout, and a sleep interval between polls:</p>
+<div class="highlight"><pre><span></span><code><span class="n">sampler</span> <span class="o">=</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
+    <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>   <span class="c1"># total seconds to wait</span>
+    <span class="n">sleep</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>           <span class="c1"># seconds between each call</span>
+    <span class="n">func</span><span class="o">=</span><span class="n">check_api_health</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<h3 id="3-write-the-polling-loop">3. Write the polling loop</h3>
+<p>Each iteration calls your function and yields the return value. Check the value and <code>break</code> (or <code>return</code>) when you're satisfied:</p>
+<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">sampler</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">sample</span> <span class="o">==</span> <span class="s2">&quot;healthy&quot;</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Service is ready!&quot;</span><span class="p">)</span>
+        <span class="k">break</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Warning:</strong> If you never <code>break</code> out of the loop and the timeout expires, <code>TimeoutExpiredError</code> is raised automatically. Always include a break condition.</p>
+</blockquote>
+<h3 id="4-handle-the-timeout">4. Handle the timeout</h3>
+<p>Wrap the loop in a <code>try</code>/<code>except</code> if you want to handle a timeout gracefully:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeoutExpiredError</span><span class="p">,</span> <span class="n">TimeoutSampler</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span><span class="n">wait_timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">sleep</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">func</span><span class="o">=</span><span class="n">get_status</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">sample</span> <span class="o">==</span> <span class="s2">&quot;ready&quot;</span><span class="p">:</span>
+            <span class="k">break</span>
+<span class="k">except</span> <span class="n">TimeoutExpiredError</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Timed out waiting for readiness&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+<h3 id="passing-arguments-to-your-function">Passing Arguments to Your Function</h3>
+<p>Supply positional arguments with <code>func_args</code> and keyword arguments directly as extra keyword arguments:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">check_endpoint</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
+    <span class="c1"># ... returns True/False</span>
+    <span class="o">...</span>
+
+<span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
+    <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span>
+    <span class="n">sleep</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="n">func</span><span class="o">=</span><span class="n">check_endpoint</span><span class="p">,</span>
+    <span class="n">func_args</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;https://api.example.com/health&quot;</span><span class="p">,),</span>
+    <span class="n">timeout</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+        <span class="k">break</span>
+</code></pre></div>
+
+<ul>
+<li><code>func_args</code> — a tuple of positional arguments forwarded to <code>func</code></li>
+<li>Any extra keyword arguments (like <code>timeout=5</code> above) are forwarded to <code>func</code> as <code>**kwargs</code></li>
+</ul>
+<h3 id="evaluating-non-boolean-return-values">Evaluating Non-Boolean Return Values</h3>
+<p>The yielded <code>sample</code> is whatever your function returns. You can apply any condition, not just truthiness:</p>
+<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span><span class="n">wait_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span> <span class="n">sleep</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">func</span><span class="o">=</span><span class="n">get_pod_count</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">sample</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">sample</span> <span class="o">&gt;=</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Reached </span><span class="si">{</span><span class="n">sample</span><span class="si">}</span><span class="s2"> pods&quot;</span><span class="p">)</span>
+        <span class="k">break</span>
+</code></pre></div>
+
+<h2 id="advanced-usage">Advanced Usage</h2>
+<h3 id="ignoring-specific-exceptions">Ignoring Specific Exceptions</h3>
+<p>By default, <code>TimeoutSampler</code> uses <code>{Exception: []}</code> as its exception dictionary, which catches and ignores all exceptions raised by your function during polling. To be more selective, pass <code>exceptions_dict</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
+    <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span>
+    <span class="n">sleep</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">func</span><span class="o">=</span><span class="n">fetch_data</span><span class="p">,</span>
+    <span class="n">exceptions_dict</span><span class="o">=</span><span class="p">{</span><span class="ne">ConnectionError</span><span class="p">:</span> <span class="p">[],</span> <span class="ne">TimeoutError</span><span class="p">:</span> <span class="p">[]},</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+        <span class="k">break</span>
+</code></pre></div>
+
+<ul>
+<li>An empty list <code>[]</code> means "ignore this exception regardless of its message."</li>
+<li>A list of strings matches against the exception message text — only matching messages are ignored.</li>
+</ul>
+<div class="highlight"><pre><span></span><code><span class="n">exceptions_dict</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="ne">ConnectionError</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;connection refused&quot;</span><span class="p">,</span> <span class="s2">&quot;reset by peer&quot;</span><span class="p">],</span>
+    <span class="ne">ValueError</span><span class="p">:</span> <span class="p">[],</span>  <span class="c1"># ignore all ValueErrors</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Any exception <strong>not</strong> listed (or listed but with a non-matching message) is immediately re-raised as a <code>TimeoutExpiredError</code>.</p>
+<p>For full details on exception filtering, see <a href="handling-exceptions.html">Filtering and Handling Exceptions</a> and <a href="exception-matching-logic.html">How Exception Matching Works</a>.</p>
+<h3 id="controlling-log-output">Controlling Log Output</h3>
+<p><code>TimeoutSampler</code> logs elapsed time and function details by default. Disable or customize logging with these flags:</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Default</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>print_log</code></td>
+<td><code>bool</code></td>
+<td><code>True</code></td>
+<td>Log elapsed time on each iteration</td>
+</tr>
+<tr>
+<td><code>print_func_log</code></td>
+<td><code>bool</code></td>
+<td><code>True</code></td>
+<td>Include function name and module in log messages</td>
+</tr>
+<tr>
+<td><code>print_func_args</code></td>
+<td><code>bool</code></td>
+<td><code>True</code></td>
+<td>Include function arguments in log (when <code>print_func_log</code> is <code>True</code>)</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
+    <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span>
+    <span class="n">sleep</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="n">func</span><span class="o">=</span><span class="n">my_func</span><span class="p">,</span>
+    <span class="n">print_log</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>        <span class="c1"># suppress all elapsed-time logging</span>
+    <span class="n">print_func_log</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>   <span class="c1"># suppress function call details</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+        <span class="k">break</span>
+</code></pre></div>
+
+<p>See <a href="controlling-logging.html">Controlling Log Output</a> for more on logging behavior.</p>
+<h3 id="using-the-retry-decorator-instead">Using the <code>@retry</code> Decorator Instead</h3>
+<p>If your polling loop always follows the simple pattern of "break when truthy," the <code>@retry</code> decorator provides a more compact alternative:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">retry</span>
+
+<span class="nd">@retry</span><span class="p">(</span><span class="n">wait_timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">sleep</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">wait_for_ready</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">check_readiness</span><span class="p">()</span>
+</code></pre></div>
+
+<p>This is equivalent to writing the <code>TimeoutSampler</code> loop manually. See <a href="using-the-retry-decorator.html">Retrying Functions with the @retry Decorator</a> for full decorator usage.</p>
+<h3 id="accessing-error-details-after-timeout">Accessing Error Details After Timeout</h3>
+<p>When <code>TimeoutExpiredError</code> is raised, it carries diagnostic attributes:</p>
+<div class="highlight"><pre><span></span><code><span class="k">try</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span><span class="n">wait_timeout</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">sleep</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">func</span><span class="o">=</span><span class="n">flaky_call</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+            <span class="k">break</span>
+<span class="k">except</span> <span class="n">TimeoutExpiredError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>                <span class="c1"># Human-readable message with elapsed time</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">err</span><span class="o">.</span><span class="n">last_exp</span><span class="p">)</span>       <span class="c1"># The last exception raised by func (or None)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">err</span><span class="o">.</span><span class="n">elapsed_time</span><span class="p">)</span>   <span class="c1"># Seconds elapsed before timeout</span>
+</code></pre></div>
+
+<p>See <a href="api-exceptions.html">TimeoutExpiredError Reference</a> for the full exception API.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p><strong><code>TimeoutExpiredError</code> raised immediately</strong>
+Your <code>wait_timeout</code> is too short relative to how long <code>func</code> takes to execute. Ensure <code>wait_timeout</code> is large enough to allow at least one full call-and-sleep cycle.</p>
+<p><strong>Exceptions from my function are silently swallowed</strong>
+The default <code>exceptions_dict</code> is <code>{Exception: []}</code>, which catches <em>everything</em>. Pass a narrower dictionary to let unexpected exceptions propagate. See <a href="handling-exceptions.html">Filtering and Handling Exceptions</a>.</p>
+<p><strong>Loop never breaks even though my function returns data</strong>
+Make sure your break condition actually matches the return value. Yielded samples are the <em>exact</em> return value of your function — check for <code>None</code>, empty collections, or <code>0</code> if those are possible returns.</p>
+<blockquote>
+<p><strong>Tip:</strong> For a full constructor reference including types and defaults, see <a href="api-timeout-sampler.html">TimeoutSampler API</a>.</p>
+</blockquote>
+<h2 id="related-pages">Related Pages</h2>
+<ul>
+<li><a href="quickstart.html">Getting Started with timeout-sampler</a></li>
+<li><a href="api-timeout-sampler.html">TimeoutSampler API</a></li>
+<li><a href="handling-exceptions.html">Filtering and Handling Exceptions</a></li>
+<li><a href="using-the-retry-decorator.html">Retrying Functions with the @retry Decorator</a></li>
+<li><a href="common-polling-patterns.html">Common Polling Patterns</a></li>
+</ul>
+                </div>
+            </article>
+            <nav class="page-nav">
+
+                <a href="quickstart.html" class="page-nav-link page-nav-prev">
+                    <span class="page-nav-label">Previous</span>
+                    <span class="page-nav-title">Getting Started with timeout-sampler</span>
+                </a>
+
+
+                <a href="using-the-retry-decorator.html" class="page-nav-link page-nav-next">
+                    <span class="page-nav-label">Next</span>
+                    <span class="page-nav-title">Retrying Functions with the @retry Decorator</span>
+                </a>
+
+            </nav>
+
+            <aside class="toc-sidebar">
+                <div class="toc-container">
+                    <h3>On this page</h3>
+                    <div class="toc">
+<ul>
+<li><a href="#prerequisites">Prerequisites</a></li>
+<li><a href="#quick-example">Quick Example</a></li>
+<li><a href="#step-by-step-polling-until-a-condition-is-met">Step-by-Step: Polling Until a Condition Is Met</a><ul>
+<li><a href="#1-import-timeoutsampler">1. Import TimeoutSampler</a></li>
+<li><a href="#2-create-the-sampler-and-iterate">2. Create the sampler and iterate</a></li>
+<li><a href="#3-write-the-polling-loop">3. Write the polling loop</a></li>
+<li><a href="#4-handle-the-timeout">4. Handle the timeout</a></li>
+<li><a href="#passing-arguments-to-your-function">Passing Arguments to Your Function</a></li>
+<li><a href="#evaluating-non-boolean-return-values">Evaluating Non-Boolean Return Values</a></li>
+</ul>
+</li>
+<li><a href="#advanced-usage">Advanced Usage</a><ul>
+<li><a href="#ignoring-specific-exceptions">Ignoring Specific Exceptions</a></li>
+<li><a href="#controlling-log-output">Controlling Log Output</a></li>
+<li><a href="#using-the-retry-decorator-instead">Using the @retry Decorator Instead</a></li>
+<li><a href="#accessing-error-details-after-timeout">Accessing Error Details After Timeout</a></li>
+</ul>
+</li>
+<li><a href="#troubleshooting">Troubleshooting</a></li>
+<li><a href="#related-pages">Related Pages</a></li>
+</ul>
+</div>
+
+                </div>
+            </aside>
+
+
+        </main>
+
+        <footer class="page-footer">
+
+            <span class="footer-version">Generated from version 1.0.22</span>
+            <span class="footer-sep">&middot;</span>
+
+            Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-llm">LLM-friendly: <a href="llms.txt">llms.txt</a> &middot; <a href="llms-full.txt">llms-full.txt</a></span>
+        </footer>
+    </div>
+
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <script src="assets/theme.js"></script>
+    <script src="assets/search.js"></script>
+    <script src="assets/copy.js"></script>
+    <script src="assets/callouts.js"></script>
+    <script src="assets/scrollspy.js"></script>
+    <script src="assets/codelabels.js"></script>
+    <script src="assets/github.js"></script>
+    <script>
+(function() {
+    var toggle = document.getElementById('sidebar-toggle');
+    var sidebar = document.getElementById('sidebar');
+    var overlay = document.getElementById('sidebar-overlay');
+    if (toggle && sidebar) {
+        toggle.addEventListener('click', function() {
+            sidebar.classList.toggle('open');
+            if (overlay) overlay.classList.toggle('open');
+            var expanded = sidebar.classList.contains('open');
+            toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        });
+    }
+    if (overlay) {
+        overlay.addEventListener('click', function() {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        });
+    }
+})();
+</script>
+<script>
+(function() {
+    var sidebar = document.querySelector('.sidebar-nav') || document.querySelector('.sidebar');
+    if (!sidebar) return;
+
+    // Restore scroll position
+    var saved = sessionStorage.getItem('sidebar-scroll');
+    if (saved) sidebar.scrollTop = parseInt(saved, 10);
+
+    // Save scroll position before navigating
+    sidebar.addEventListener('scroll', function() {
+        sessionStorage.setItem('sidebar-scroll', sidebar.scrollTop.toString());
+    });
+
+    // Also scroll active link into view if no saved position
+    if (!saved) {
+        var active = sidebar.querySelector('.nav-link.active');
+        if (active) {
+            active.scrollIntoView({ block: 'center', behavior: 'instant' });
+        }
+    }
+})();
+</script>
+</body>
+</html>
