@@ -193,3 +193,87 @@ def test_decorator():
 def test_decorator_negative():
     with pytest.raises(TimeoutExpiredError):
         never_succeeds()
+
+
+# callable filter tests
+
+
+class StatusError(Exception):
+    """Exception with a status attribute for testing callable filters."""
+
+    def __init__(self, status: int):
+        self.status = status
+        super().__init__(f"{status}")
+
+
+class TestCallableExceptionFilter:
+    @staticmethod
+    def _raise_status_error(status: int):
+        raise StatusError(status=status)
+
+    def test_callable_filter_ignores_matching_exception(self):
+        """Callable returning True should ignore the exception and allow retry."""
+        with pytest.raises(TimeoutExpiredError):
+            for _ in TimeoutSampler(
+                wait_timeout=1,
+                sleep=1,
+                func=self._raise_status_error,
+                exceptions_dict={StatusError: [lambda exc: exc.status >= 500]},
+                print_log=False,
+                status=502,
+            ):
+                continue
+
+    def test_callable_filter_raises_non_matching_exception(self):
+        """Callable returning False should re-raise the exception immediately."""
+        with pytest.raises(TimeoutExpiredError) as exc_info:
+            for _ in TimeoutSampler(
+                wait_timeout=1,
+                sleep=1,
+                func=self._raise_status_error,
+                exceptions_dict={StatusError: [lambda exc: exc.status >= 500]},
+                print_log=False,
+                status=400,
+            ):
+                continue
+        assert exc_info.value.last_exp is not None
+        assert exc_info.value.last_exp.status == 400
+
+    def test_callable_filter_with_string_filter_combined(self):
+        """Callable and string filters can coexist in the same list."""
+        with pytest.raises(TimeoutExpiredError):
+            for _ in TimeoutSampler(
+                wait_timeout=1,
+                sleep=1,
+                func=self._raise_status_error,
+                exceptions_dict={StatusError: ["999", lambda exc: exc.status >= 500]},
+                print_log=False,
+                status=503,
+            ):
+                continue
+
+    def test_string_filter_still_works(self):
+        """Existing string matching behavior is unchanged."""
+        with pytest.raises(TimeoutExpiredError):
+            for _ in TimeoutSampler(
+                wait_timeout=1,
+                sleep=1,
+                func=self._raise_status_error,
+                exceptions_dict={StatusError: ["502"]},
+                print_log=False,
+                status=502,
+            ):
+                continue
+
+    def test_empty_list_still_matches_all(self):
+        """Empty list continues to match all exceptions of the given type."""
+        with pytest.raises(TimeoutExpiredError):
+            for _ in TimeoutSampler(
+                wait_timeout=1,
+                sleep=1,
+                func=self._raise_status_error,
+                exceptions_dict={StatusError: []},
+                print_log=False,
+                status=400,
+            ):
+                continue

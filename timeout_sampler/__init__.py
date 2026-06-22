@@ -47,8 +47,12 @@ class TimeoutSampler:
                 exception1_msg0,
                 exception1_msg1
             ],
-            exception2: []
+            exception2: [],
+            exception3: [lambda exc: exc.status >= 500]
         }
+
+        Values can be strings (matched against str(exception)) or callables
+        (invoked with the exception, returning True to ignore/retry).
 
         If an exception is raised within `func`:
             Example exception inheritance:
@@ -88,7 +92,7 @@ class TimeoutSampler:
         wait_timeout: float,
         sleep: int,
         func: Callable,
-        exceptions_dict: dict[type[Exception], list[str]] | None = None,
+        exceptions_dict: dict[type[Exception], list[str | Callable[[Exception], bool]]] | None = None,
         print_log: bool = True,
         print_func_log: bool = True,
         print_func_args: bool = True,
@@ -182,14 +186,15 @@ class TimeoutSampler:
         raise TimeoutExpiredError(self._get_exception_log(exp=last_exp), last_exp=last_exp)
 
     @staticmethod
-    def _is_exception_matched(exp: Exception, exception_messages: list[str]) -> bool:
+    def _is_exception_matched(exp: Exception, exception_messages: list[str | Callable[[Exception], bool]]) -> bool:
         """
         Verify whether exception text is allowed and should be raised
 
         Args:
             exp (Exception): Exception object raised by `func`
             exception_messages (list): Either an empty list allowing all text,
-                or a list of allowed strings to match against the exception text.
+                a list of strings to match against the exception text,
+                or callables that receive the exception and return True to ignore.
 
         Returns:
             bool: True if exception text is allowed or no exception text given, False otherwise
@@ -197,8 +202,7 @@ class TimeoutSampler:
         if not exception_messages:
             return True
 
-        # Prevent match if provided with empty string
-        return any(msg and msg in str(exp) for msg in exception_messages)
+        return any(msg(exp) if callable(msg) else (msg and msg in str(exp)) for msg in exception_messages)
 
     def _should_ignore_exception(self, exp: Exception) -> bool:
         """
@@ -259,7 +263,7 @@ class TimeoutWatch:
 def retry(
     wait_timeout: int,
     sleep: int,
-    exceptions_dict: dict[type[Exception], list[str]] | None = None,
+    exceptions_dict: dict[type[Exception], list[str | Callable[[Exception], bool]]] | None = None,
     print_log: bool = True,
     print_func_log: bool = True,
     print_func_args: bool = True,
