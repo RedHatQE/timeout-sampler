@@ -1,0 +1,2704 @@
+# timeout-sampler
+
+> Poll any function until it succeeds or times out, with fine-grained exception handling
+
+---
+
+Source: quickstart.md
+
+## Prerequisites
+
+- Python 3.9 or later
+- `pip` (or any Python package manager)
+
+## Install
+
+```bash
+pip install timeout-sampler
+```
+
+## Quick Example
+
+```python
+from timeout_sampler import TimeoutSampler
+
+for sample in TimeoutSampler(wait_timeout=10, sleep=2, func=lambda: True):
+    if sample:
+        print("Got a truthy value, done!")
+        break
+```
+
+That's it — `TimeoutSampler` calls your function every `sleep` seconds. Each iteration yields the return value so you can inspect it. If `wait_timeout` seconds elapse without a `break`, a `TimeoutExpiredError` is raised.
+
+## Step-by-Step Walkthrough
+
+### 1. Import the essentials
+
+```python
+from timeout_sampler import TimeoutSampler, TimeoutExpiredError
+```
+
+### 2. Define the function you want to poll
+
+Any callable works — a regular function, a lambda, or a method:
+
+```python
+import random
+
+def check_service():
+    """Simulate a service that becomes ready after a few attempts."""
+    return random.random() > 0.7
+```
+
+### 3. Create the sampler and iterate
+
+```python
+sampler = TimeoutSampler(
+    wait_timeout=30,   # total seconds to wait
+    sleep=5,           # seconds between retries
+    func=check_service,
+)
+
+for sample in sampler:
+    if sample:
+        print("Service is ready!")
+        break
+```
+
+If `check_service()` never returns a truthy value within 30 seconds, a `TimeoutExpiredError` is raised automatically after the loop ends.
+
+### 4. Handle the timeout
+
+Wrap the loop in a `try`/`except` when you need to react to a timeout:
+
+```python
+try:
+    for sample in TimeoutSampler(wait_timeout=10, sleep=2, func=check_service):
+        if sample:
+            break
+except TimeoutExpiredError as e:
+    print(f"Timed out: {e}")
+```
+
+`TimeoutExpiredError` exposes two useful attributes:
+
+| Attribute      | Type               | Description                                      |
+|----------------|--------------------|--------------------------------------------------|
+| `last_exp`     | `Exception | None` | The last exception raised inside `func`, if any  |
+| `elapsed_time` | `float | None`     | Seconds elapsed before the error was raised       |
+
+### 5. Pass arguments to your function
+
+Use keyword arguments directly on the `TimeoutSampler` constructor — they are forwarded to `func`:
+
+```python
+def is_ready(host, port):
+    # ... check connection ...
+    return True
+
+for sample in TimeoutSampler(
+    wait_timeout=30,
+    sleep=5,
+    func=is_ready,
+    host="localhost",
+    port=8080,
+):
+    if sample:
+        break
+```
+
+## Use the `@retry` Decorator
+
+For the common pattern of "poll until truthy, then return the value," the `@retry` decorator eliminates the `for` loop entirely:
+
+```python
+from timeout_sampler import retry
+
+@retry(wait_timeout=10, sleep=2)
+def get_value():
+    # return a truthy value when ready
+    return True
+
+result = get_value()  # blocks until truthy or TimeoutExpiredError
+```
+
+If `get_value()` keeps returning a falsy value for 10 seconds, `TimeoutExpiredError` is raised. See [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html) for full decorator options.
+
+## Advanced Usage
+
+### Handling exceptions during polling
+
+By default, `TimeoutSampler` catches **all** exceptions raised inside `func` and keeps retrying. You can control this with `exceptions_dict`:
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=20,
+    sleep=3,
+    func=check_service,
+    exceptions_dict={ConnectionError: []},
+):
+    if sample:
+        break
+```
+
+- `{ConnectionError: []}` — ignore all `ConnectionError` instances (and subclasses) and keep polling.
+- `{ConnectionError: ["refused"]}` — only ignore a `ConnectionError` whose message contains `"refused"`; any other `ConnectionError` re-raises immediately.
+- `{}` — do **not** ignore any exceptions; every exception re-raises immediately.
+
+> **Warning:** Passing an empty dict `{}` means *no* exceptions are caught. If you want to catch all exceptions (the default), omit `exceptions_dict` entirely or pass `{Exception: []}`.
+
+See [Filtering and Handling Exceptions](handling-exceptions.html) for the full inheritance-aware matching rules.
+
+### Controlling log output
+
+`TimeoutSampler` logs elapsed time and function call details by default. Toggle these with three boolean flags:
+
+| Parameter         | Default | Effect                                                 |
+|-------------------|---------|--------------------------------------------------------|
+| `print_log`       | `True`  | Log elapsed time on each iteration                     |
+| `print_func_log`  | `True`  | Include function name and module in log messages       |
+| `print_func_args` | `True`  | Include `args`/`kwargs` in the function log            |
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=10,
+    sleep=2,
+    func=check_service,
+    print_log=False,        # silence all log output
+):
+    if sample:
+        break
+```
+
+See [Controlling Log Output](controlling-logging.html) for details.
+
+### Tracking elapsed time independently
+
+The `TimeoutWatch` helper lets you build custom timing logic outside of `TimeoutSampler`:
+
+```python
+from timeout_sampler import TimeoutWatch
+
+watch = TimeoutWatch(timeout=60.0)
+
+while watch.remaining_time() > 0:
+    # your custom logic here
+    pass
+```
+
+See [Tracking Elapsed Time with TimeoutWatch](tracking-elapsed-time.html) for more.
+
+## Troubleshooting
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| `TimeoutExpiredError` raised immediately | `wait_timeout` is too small or `0` | Increase `wait_timeout` to allow at least one poll cycle |
+| Function arguments not reaching `func` | Passing args positionally | Pass arguments as **keyword arguments** on the `TimeoutSampler` constructor (e.g., `host="localhost"`) |
+| All exceptions are silently swallowed | Default `exceptions_dict` is `{Exception: []}` | Pass a narrower `exceptions_dict` to only ignore expected exceptions |
+| Loop never exits | `func` returns truthy but there is no `break` | Always `break` (or `return`) out of the `for` loop when you get the value you want |
+
+> **Tip:** For copy-paste recipes covering common real-world scenarios, see [Common Polling Patterns](common-polling-patterns.html).
+
+## Related Pages
+
+- [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
+- [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
+- [Filtering and Handling Exceptions](handling-exceptions.html)
+- [Common Polling Patterns](common-polling-patterns.html)
+- [TimeoutSampler API](api-timeout-sampler.html)
+
+---
+
+Source: polling-with-timeout-sampler.md
+
+# Polling a Function with TimeoutSampler
+
+Poll any callable at regular intervals, inspect each return value, and break out as soon as a success condition is met — all with a built-in timeout safety net.
+
+## Prerequisites
+
+- `timeout-sampler` installed in your project (see [Getting Started with timeout-sampler](quickstart.html))
+
+## Quick Example
+
+```python
+from timeout_sampler import TimeoutSampler
+
+for sample in TimeoutSampler(wait_timeout=30, sleep=5, func=my_check_function):
+    if sample:
+        break
+```
+
+This calls `my_check_function()` every 5 seconds for up to 30 seconds. As soon as it returns a truthy value, the loop breaks. If 30 seconds elapse without success, a `TimeoutExpiredError` is raised.
+
+## Step-by-Step: Polling Until a Condition Is Met
+
+### 1. Import `TimeoutSampler`
+
+```python
+from timeout_sampler import TimeoutSampler
+```
+
+### 2. Create the sampler and iterate
+
+Pass your function, a total timeout, and a sleep interval between polls:
+
+```python
+sampler = TimeoutSampler(
+    wait_timeout=60,   # total seconds to wait
+    sleep=3,           # seconds between each call
+    func=check_api_health,
+)
+```
+
+### 3. Write the polling loop
+
+Each iteration calls your function and yields the return value. Check the value and `break` (or `return`) when you're satisfied:
+
+```python
+for sample in sampler:
+    if sample == "healthy":
+        print("Service is ready!")
+        break
+```
+
+> **Warning:** If you never `break` out of the loop and the timeout expires, `TimeoutExpiredError` is raised automatically. Always include a break condition.
+
+### 4. Handle the timeout
+
+Wrap the loop in a `try`/`except` if you want to handle a timeout gracefully:
+
+```python
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
+
+try:
+    for sample in TimeoutSampler(wait_timeout=10, sleep=2, func=get_status):
+        if sample == "ready":
+            break
+except TimeoutExpiredError:
+    print("Timed out waiting for readiness")
+```
+
+### Passing Arguments to Your Function
+
+Supply positional arguments with `func_args` and keyword arguments directly as extra keyword arguments:
+
+```python
+def check_endpoint(url, timeout=5):
+    # ... returns True/False
+    ...
+
+for sample in TimeoutSampler(
+    wait_timeout=30,
+    sleep=5,
+    func=check_endpoint,
+    func_args=("https://api.example.com/health",),
+    timeout=5,
+):
+    if sample:
+        break
+```
+
+- `func_args` — a tuple of positional arguments forwarded to `func`
+- Any extra keyword arguments (like `timeout=5` above) are forwarded to `func` as `**kwargs`
+
+### Evaluating Non-Boolean Return Values
+
+The yielded `sample` is whatever your function returns. You can apply any condition, not just truthiness:
+
+```python
+for sample in TimeoutSampler(wait_timeout=60, sleep=2, func=get_pod_count):
+    if sample is not None and sample >= 3:
+        print(f"Reached {sample} pods")
+        break
+```
+
+## Advanced Usage
+
+### Ignoring Specific Exceptions
+
+By default, `TimeoutSampler` uses `{Exception: []}` as its exception dictionary, which catches and ignores all exceptions raised by your function during polling. To be more selective, pass `exceptions_dict`:
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=30,
+    sleep=2,
+    func=fetch_data,
+    exceptions_dict={ConnectionError: [], TimeoutError: []},
+):
+    if sample:
+        break
+```
+
+- An empty list `[]` means "ignore this exception regardless of its message."
+- A list of strings matches against the exception message text — only matching messages are ignored.
+
+```python
+exceptions_dict = {
+    ConnectionError: ["connection refused", "reset by peer"],
+    ValueError: [],  # ignore all ValueErrors
+}
+```
+
+Any exception **not** listed (or listed but with a non-matching message) is immediately re-raised as a `TimeoutExpiredError`.
+
+For full details on exception filtering, see [Filtering and Handling Exceptions](handling-exceptions.html) and [How Exception Matching Works](exception-matching-logic.html).
+
+### Controlling Log Output
+
+`TimeoutSampler` logs elapsed time and function details by default. Disable or customize logging with these flags:
+
+| Parameter         | Type   | Default | Effect                                              |
+|-------------------|--------|---------|-----------------------------------------------------|
+| `print_log`       | `bool` | `True`  | Log elapsed time on each iteration                  |
+| `print_func_log`  | `bool` | `True`  | Include function name and module in log messages     |
+| `print_func_args` | `bool` | `True`  | Include function arguments in log (when `print_func_log` is `True`) |
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=30,
+    sleep=5,
+    func=my_func,
+    print_log=False,        # suppress all elapsed-time logging
+    print_func_log=False,   # suppress function call details
+):
+    if sample:
+        break
+```
+
+See [Controlling Log Output](controlling-logging.html) for more on logging behavior.
+
+### Using the `@retry` Decorator Instead
+
+If your polling loop always follows the simple pattern of "break when truthy," the `@retry` decorator provides a more compact alternative:
+
+```python
+from timeout_sampler import retry
+
+@retry(wait_timeout=10, sleep=2)
+def wait_for_ready():
+    return check_readiness()
+```
+
+This is equivalent to writing the `TimeoutSampler` loop manually. See [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html) for full decorator usage.
+
+### Accessing Error Details After Timeout
+
+When `TimeoutExpiredError` is raised, it carries diagnostic attributes:
+
+```python
+try:
+    for sample in TimeoutSampler(wait_timeout=5, sleep=1, func=flaky_call):
+        if sample:
+            break
+except TimeoutExpiredError as err:
+    print(err)                # Human-readable message with elapsed time
+    print(err.last_exp)       # The last exception raised by func (or None)
+    print(err.elapsed_time)   # Seconds elapsed before timeout
+```
+
+See [TimeoutExpiredError Reference](api-exceptions.html) for the full exception API.
+
+## Troubleshooting
+
+**`TimeoutExpiredError` raised immediately**
+Your `wait_timeout` is too short relative to how long `func` takes to execute. Ensure `wait_timeout` is large enough to allow at least one full call-and-sleep cycle.
+
+**Exceptions from my function are silently swallowed**
+The default `exceptions_dict` is `{Exception: []}`, which catches *everything*. Pass a narrower dictionary to let unexpected exceptions propagate. See [Filtering and Handling Exceptions](handling-exceptions.html).
+
+**Loop never breaks even though my function returns data**
+Make sure your break condition actually matches the return value. Yielded samples are the *exact* return value of your function — check for `None`, empty collections, or `0` if those are possible returns.
+
+> **Tip:** For a full constructor reference including types and defaults, see [TimeoutSampler API](api-timeout-sampler.html).
+
+## Related Pages
+
+- [Getting Started with timeout-sampler](quickstart.html)
+- [TimeoutSampler API](api-timeout-sampler.html)
+- [Filtering and Handling Exceptions](handling-exceptions.html)
+- [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
+- [Common Polling Patterns](common-polling-patterns.html)
+
+---
+
+Source: using-the-retry-decorator.md
+
+# Retrying Functions with the @retry Decorator
+
+You want to automatically retry a function until it returns a truthy value—without writing a manual polling loop. The `@retry` decorator wraps your function so it keeps calling itself on an interval until it succeeds or a timeout expires.
+
+## Prerequisites
+
+- `timeout-sampler` installed in your environment. See [Getting Started with timeout-sampler](quickstart.html) for installation steps.
+- Basic familiarity with Python decorators.
+
+## Quick Example
+
+```python
+from timeout_sampler import retry
+
+@retry(wait_timeout=30, sleep=5)
+def check_service_health():
+    response = requests.get("https://my-service/health")
+    return response.status_code == 200
+
+# Blocks until the function returns True or 30 seconds elapse
+check_service_health()
+```
+
+That's it — the decorator handles all the polling. If `check_service_health()` doesn't return a truthy value within 30 seconds, a `TimeoutExpiredError` is raised.
+
+## How It Works
+
+1. **Decorate** your function with `@retry(wait_timeout=..., sleep=...)`.
+2. **Call** the function normally — arguments are passed through.
+3. The decorator calls your function every `sleep` seconds.
+4. As soon as the function returns a **truthy** value, that value is returned to the caller.
+5. If the timeout expires without a truthy return, `TimeoutExpiredError` is raised.
+
+## Parameters
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `wait_timeout` | `int` | *(required)* | Maximum seconds to keep retrying |
+| `sleep` | `int` | *(required)* | Seconds to wait between each attempt |
+| `exceptions_dict` | `dict` | `None` | Exceptions to tolerate during polling |
+| `print_log` | `bool` | `True` | Log elapsed time to console |
+| `print_func_log` | `bool` | `True` | Log function call details |
+| `print_func_args` | `bool` | `True` | Include arguments in the function log |
+
+> **Tip:** For a complete parameter reference, see [@retry Decorator API](api-retry-decorator.html).
+
+## Step-by-Step: Retrying Until a Condition Is Met
+
+### 1. Define your function
+
+Write a function that returns a truthy value on success and a falsy value (e.g., `False`, `None`, `0`, `""`) on failure.
+
+```python
+def is_database_ready():
+    status = db.get_status()
+    return status == "ready"
+```
+
+### 2. Apply the decorator
+
+```python
+from timeout_sampler import retry
+
+@retry(wait_timeout=60, sleep=2)
+def is_database_ready():
+    status = db.get_status()
+    return status == "ready"
+```
+
+### 3. Call the function
+
+```python
+is_database_ready()
+print("Database is ready!")
+```
+
+### 4. Handle timeout
+
+```python
+from timeout_sampler import TimeoutExpiredError
+
+try:
+    is_database_ready()
+except TimeoutExpiredError:
+    print("Database did not become ready in time")
+```
+
+## Passing Arguments
+
+The decorator passes through all positional and keyword arguments to your function:
+
+```python
+from timeout_sampler import retry
+
+@retry(wait_timeout=30, sleep=3)
+def wait_for_pod(namespace, name, status="Running"):
+    pod = get_pod(namespace, name)
+    return pod.status == status
+
+# Arguments are forwarded to the decorated function
+wait_for_pod("default", "my-pod", status="Running")
+```
+
+## Returning Values
+
+When the function returns a truthy value, that value is returned to the caller—not just `True`:
+
+```python
+@retry(wait_timeout=20, sleep=2)
+def fetch_result():
+    result = get_async_result()
+    return result  # Returns the actual result object when truthy
+
+data = fetch_result()
+print(data)  # The truthy value your function returned
+```
+
+> **Warning:** If your function returns a value that Python considers falsy (e.g., `0`, empty list `[]`, empty string `""`), the decorator treats it as a failed attempt and keeps retrying. Make sure success cases return a truthy value.
+
+## Advanced Usage
+
+### Tolerating Specific Exceptions
+
+Use `exceptions_dict` to tell the decorator which exceptions should be ignored during polling instead of stopping execution. The keys are exception classes, and the values are lists of substring patterns to match against the exception message. An empty list matches all messages for that exception type.
+
+```python
+@retry(
+    wait_timeout=30,
+    sleep=5,
+    exceptions_dict={ConnectionError: []},
+)
+def connect_to_service():
+    return requests.get("https://my-service/api").ok
+```
+
+This keeps retrying even when `ConnectionError` is raised—useful for services that are still starting up.
+
+You can also filter by exception message:
+
+```python
+@retry(
+    wait_timeout=30,
+    sleep=5,
+    exceptions_dict={ConnectionError: ["Connection refused"]},
+)
+def connect_to_service():
+    return requests.get("https://my-service/api").ok
+```
+
+Only `ConnectionError` exceptions containing `"Connection refused"` in their message text are tolerated. Other `ConnectionError` messages will stop polling.
+
+> **Note:** For a detailed explanation of how exception matching and inheritance work, see [How Exception Matching Works](exception-matching-logic.html). For more `exceptions_dict` patterns, see [Filtering and Handling Exceptions](handling-exceptions.html).
+
+### Controlling Log Output
+
+By default, the decorator logs timing information and function details. You can turn these off individually:
+
+```python
+@retry(
+    wait_timeout=10,
+    sleep=1,
+    print_log=False,       # Suppress all elapsed-time logs
+)
+def quiet_check():
+    return some_condition()
+```
+
+```python
+@retry(
+    wait_timeout=10,
+    sleep=1,
+    print_func_log=False,  # Suppress function name in logs
+    print_func_args=False,  # Suppress argument values in logs
+)
+def check_with_secrets(api_key):
+    return validate(api_key)
+```
+
+> **Tip:** For more detail on logging options, see [Controlling Log Output](controlling-logging.html).
+
+### When to Use @retry vs. TimeoutSampler
+
+| | `@retry` | `TimeoutSampler` |
+|---|---|---|
+| **Best for** | Simple "retry until truthy" cases | Custom logic on each iteration |
+| **Success condition** | Any truthy return value | You define it in the loop body |
+| **Access to each result** | No — only the final truthy value | Yes — you inspect every yielded value |
+| **Code style** | Decorator on function definition | Explicit `for` loop |
+
+Use `@retry` when you just need a function to keep trying. Use `TimeoutSampler` when you need to examine intermediate results or apply complex success logic. See [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html) for the iterator approach.
+
+## Troubleshooting
+
+**`TimeoutExpiredError` is raised even though my function works**
+
+Your function may be returning a falsy value on success. Check that it returns something truthy (e.g., `True`, a non-empty object) when the operation succeeds.
+
+**Polling seems to stop too early when exceptions occur**
+
+If your function raises an exception that isn't listed in `exceptions_dict`, polling will stop. Add the exception class to `exceptions_dict` to tolerate it. See [Filtering and Handling Exceptions](handling-exceptions.html) for details.
+
+**Logs are too noisy**
+
+Set `print_log=False` to suppress timing output, or set `print_func_args=False` to hide sensitive argument values. See [Controlling Log Output](controlling-logging.html).
+
+## Related Pages
+
+- [@retry Decorator API](api-retry-decorator.html)
+- [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
+- [Filtering and Handling Exceptions](handling-exceptions.html)
+- [Controlling Log Output](controlling-logging.html)
+- [How Exception Matching Works](exception-matching-logic.html)
+
+---
+
+Source: handling-exceptions.md
+
+# Filtering and Handling Exceptions
+
+When polling a function that may intermittently fail, you need to control which exceptions are silently retried, which are matched by message text, and which immediately abort the loop. The `exceptions_dict` parameter gives you fine-grained control over all three behaviors.
+
+## Prerequisites
+
+- `timeout-sampler` installed in your project (see [Getting Started with timeout-sampler](quickstart.html))
+- Basic familiarity with creating a polling loop (see [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html))
+
+## Quick Example
+
+```python
+from timeout_sampler import TimeoutSampler
+
+# Ignore all ConnectionError exceptions during polling
+for sample in TimeoutSampler(
+    wait_timeout=30,
+    sleep=2,
+    func=fetch_data,
+    exceptions_dict={ConnectionError: []},
+):
+    if sample:
+        break
+```
+
+An empty list `[]` means "ignore this exception regardless of its message text." If `fetch_data()` raises a `ConnectionError`, polling continues. Any other exception type immediately stops the loop.
+
+## How `exceptions_dict` Works
+
+The `exceptions_dict` parameter is a dictionary that maps exception classes to lists of allowed message strings:
+
+```python
+exceptions_dict: dict[type[Exception], list[str]] | None
+```
+
+| Value | Meaning |
+|---|---|
+| `{SomeError: []}` | Ignore **all** `SomeError` exceptions (any message) |
+| `{SomeError: ["connection refused"]}` | Ignore `SomeError` only when the message **contains** `"connection refused"` |
+| `{SomeError: ["timeout", "refused"]}` | Ignore `SomeError` when the message contains `"timeout"` **or** `"refused"` |
+| `{}` | Ignore **nothing** — any exception immediately stops polling |
+| `None` (or omitted) | Defaults to `{Exception: []}` — ignore all exceptions |
+
+> **Warning:** When you omit `exceptions_dict` entirely, **all** exceptions are silently ignored during polling. Always pass an explicit `exceptions_dict` in production to avoid swallowing unexpected errors.
+
+## Step-by-Step: Common Use Cases
+
+### 1. Ignore a Specific Exception Type
+
+Pass the exception class with an empty list to ignore every instance of that exception:
+
+```python
+from timeout_sampler import TimeoutSampler
+
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=5,
+    func=check_service_health,
+    exceptions_dict={ConnectionError: []},
+):
+    if sample == "healthy":
+        break
+```
+
+### 2. Match by Message Text
+
+Provide one or more substrings in the list. The exception is ignored only when any substring appears in the exception's text:
+
+```python
+from timeout_sampler import TimeoutSampler
+
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=5,
+    func=query_api,
+    exceptions_dict={
+        RuntimeError: ["temporarily unavailable", "rate limit"],
+    },
+):
+    if sample:
+        break
+```
+
+Here, a `RuntimeError("service temporarily unavailable")` is ignored (substring match), but a `RuntimeError("invalid credentials")` immediately stops polling.
+
+> **Note:** Message matching uses a simple substring check (`msg in str(exception)`), not regex. The match is case-sensitive.
+
+### 3. Handle Multiple Exception Types
+
+Add multiple entries to the dictionary, each with its own message filter:
+
+```python
+from timeout_sampler import TimeoutSampler
+
+for sample in TimeoutSampler(
+    wait_timeout=120,
+    sleep=10,
+    func=deploy_resource,
+    exceptions_dict={
+        ConnectionError: [],                      # ignore all connection errors
+        TimeoutError: [],                         # ignore all timeout errors
+        ValueError: ["not ready", "pending"],     # ignore only specific messages
+    },
+):
+    if sample:
+        break
+```
+
+### 4. Re-raise All Exceptions (No Filtering)
+
+Pass an empty dictionary to ensure any exception immediately stops polling:
+
+```python
+from timeout_sampler import TimeoutSampler
+
+for sample in TimeoutSampler(
+    wait_timeout=30,
+    sleep=2,
+    func=critical_operation,
+    exceptions_dict={},
+):
+    if sample:
+        break
+```
+
+### 5. Use with the `@retry` Decorator
+
+The `exceptions_dict` parameter works identically with the `@retry` decorator:
+
+```python
+from timeout_sampler import retry
+
+@retry(
+    wait_timeout=30,
+    sleep=2,
+    exceptions_dict={ConnectionError: []},
+)
+def fetch_data():
+    # May raise ConnectionError intermittently
+    return api_client.get("/data")
+```
+
+See [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html) for full decorator usage.
+
+## Advanced Usage
+
+### Inheritance-Aware Matching
+
+Exception matching respects Python's class hierarchy. When you add a parent exception class to `exceptions_dict`, **all child classes** are also matched:
+
+```python
+exceptions_dict = {ConnectionError: []}
+```
+
+| Raised Exception | Matched? | Reason |
+|---|---|---|
+| `ConnectionError` | ✅ Yes | Exact match |
+| `ConnectionRefusedError` | ✅ Yes | Subclass of `ConnectionError` |
+| `OSError` | ❌ No | Parent class, not a subclass |
+| `ValueError` | ❌ No | Unrelated type |
+
+This means you can filter broadly by specifying a base class, or narrowly by specifying a leaf class.
+
+> **Tip:** Use `{Exception: []}` to ignore all exceptions (this is the default when `exceptions_dict` is omitted). Use a specific class like `{KeyError: []}` to only ignore that type and its subclasses.
+
+### Three Outcome Categories
+
+When your polled function raises an exception, exactly one of three things happens:
+
+1. **Exact match or child class, message matches** → exception is ignored, polling continues
+2. **Exact match or child class, message does NOT match** → polling stops, `TimeoutExpiredError` is raised immediately
+3. **Exception type not in `exceptions_dict`** → polling stops, `TimeoutExpiredError` is raised immediately
+
+For a deeper look at the matching algorithm, see [How Exception Matching Works](exception-matching-logic.html).
+
+### Accessing the Original Exception After Timeout
+
+When polling ends — either by timeout or a non-matching exception — a `TimeoutExpiredError` is raised. The original exception is stored on its `last_exp` attribute:
+
+```python
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
+
+try:
+    for sample in TimeoutSampler(
+        wait_timeout=10,
+        sleep=2,
+        func=flaky_function,
+        exceptions_dict={ConnectionError: []},
+    ):
+        if sample:
+            break
+except TimeoutExpiredError as e:
+    print(f"Last exception type: {type(e.last_exp)}")  # e.g. <class 'ConnectionError'>
+    print(f"Last exception message: {e.last_exp}")
+    print(f"Elapsed time: {e.elapsed_time}")
+```
+
+> **Note:** If the function never raised an exception (it just returned falsy values until timeout), `last_exp` is `None`.
+
+See [TimeoutExpiredError Reference](api-exceptions.html) for all available attributes.
+
+### Empty Strings in Message Lists
+
+An empty string in the message list is **not** treated as a wildcard — it is explicitly skipped. Use an empty list `[]` instead to match all messages:
+
+```python
+# ❌ WRONG — the empty string "" is ignored, so NO messages match
+exceptions_dict = {ValueError: [""]}
+
+# ✅ CORRECT — empty list means "match all messages"
+exceptions_dict = {ValueError: []}
+```
+
+## Troubleshooting
+
+| Problem | Cause | Solution |
+|---|---|---|
+| All exceptions are swallowed silently | `exceptions_dict` was omitted (defaults to `{Exception: []}`) | Pass an explicit `exceptions_dict` with only the types you want to ignore |
+| Exception is not being ignored | The raised exception is a **parent** of the class in `exceptions_dict`, not a child | Add the parent class to `exceptions_dict`, or use a broader base class |
+| Message filter doesn't match | Substring matching is case-sensitive | Verify the exact exception message text and case |
+| `TimeoutExpiredError` raised immediately despite exception being in dict | The exception message doesn't contain any of the specified substrings | Use `[]` to ignore all messages, or add the correct substring |
+
+## Related Pages
+
+- [How Exception Matching Works](exception-matching-logic.html)
+- [TimeoutExpiredError Reference](api-exceptions.html)
+- [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
+- [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
+- [TimeoutSampler API](api-timeout-sampler.html)
+
+---
+
+Source: controlling-logging.md
+
+# Controlling Log Output
+
+When debugging polling loops or running in production, you may want to control how much logging `timeout-sampler` produces. Three boolean parameters — `print_log`, `print_func_log`, and `print_func_args` — let you toggle elapsed-time messages, function-call details, and argument visibility independently.
+
+## Prerequisites
+
+- `timeout-sampler` installed in your project (see [Getting Started with timeout-sampler](quickstart.html))
+- Basic familiarity with `TimeoutSampler` or the `@retry` decorator
+
+## Quick Example
+
+Suppress all log output by setting `print_log=False`:
+
+```python
+from timeout_sampler import TimeoutSampler
+
+for sample in TimeoutSampler(
+    wait_timeout=30,
+    sleep=5,
+    func=my_check,
+    print_log=False,
+):
+    if sample:
+        break
+```
+
+No log lines are emitted — no elapsed time, no function info, nothing.
+
+## Understanding the Three Parameters
+
+All three parameters default to `True`. Here's what each one controls:
+
+| Parameter | Default | What it controls |
+|---|---|---|
+| `print_log` | `True` | Master switch — controls whether *any* log output is emitted |
+| `print_func_log` | `True` | Adds the function name and module to the log line |
+| `print_func_args` | `True` | Includes positional and keyword arguments in the function log |
+
+> **Note:** `print_func_log` and `print_func_args` only take effect when `print_log` is `True`. Setting `print_log=False` silences everything regardless of the other two settings.
+
+## Step-by-Step: Choosing a Logging Level
+
+### 1. Full logging (default)
+
+```python
+sampler = TimeoutSampler(
+    wait_timeout=60,
+    sleep=5,
+    func=check_service,
+    func_args=("https://api.example.com",),
+    retries=3,
+)
+```
+
+Log output:
+
+```
+Waiting for 60 seconds [0:01:00], retry every 5 seconds. (Function: myapp.health.check_service Args: ('https://api.example.com',) Kwargs: {'retries': 3})
+Elapsed time: 5.002 [0:00:05.002000]
+```
+
+### 2. Hide arguments only
+
+When function arguments contain secrets or are too verbose:
+
+```python
+sampler = TimeoutSampler(
+    wait_timeout=60,
+    sleep=5,
+    func=check_service,
+    print_func_args=False,
+    func_args=("https://api.example.com",),
+    token="s3cret",
+)
+```
+
+Log output:
+
+```
+Waiting for 60 seconds [0:01:00], retry every 5 seconds. (Function: myapp.health.check_service)
+Elapsed time: 5.002 [0:00:05.002000]
+```
+
+The function name and module are still logged, but `Args` and `Kwargs` are omitted.
+
+### 3. Hide function details entirely
+
+When you only care about timing:
+
+```python
+sampler = TimeoutSampler(
+    wait_timeout=60,
+    sleep=5,
+    func=check_service,
+    print_func_log=False,
+)
+```
+
+Log output:
+
+```
+Waiting for 60 seconds [0:01:00], retry every 5 seconds.
+Elapsed time: 5.002 [0:00:05.002000]
+```
+
+> **Tip:** Setting `print_func_log=False` also suppresses argument output, so you don't need to set `print_func_args=False` separately.
+
+### 4. Silence all logging
+
+For production code, test suites, or inner loops where log noise is unwanted:
+
+```python
+sampler = TimeoutSampler(
+    wait_timeout=60,
+    sleep=5,
+    func=check_service,
+    print_log=False,
+)
+```
+
+No log output is produced at all — neither the initial "Waiting for…" message nor the per-iteration elapsed-time lines.
+
+## Using with the @retry Decorator
+
+The same three parameters are available on the `@retry` decorator:
+
+```python
+from timeout_sampler import retry
+
+@retry(wait_timeout=30, sleep=5, print_log=True, print_func_log=True, print_func_args=False)
+def fetch_data(api_key):
+    response = requests.get("https://api.example.com", headers={"Authorization": api_key})
+    return response.ok
+```
+
+This logs the function name and elapsed time but omits the `api_key` argument from log output.
+
+See [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html) for full decorator usage.
+
+## Parameter Combination Reference
+
+| `print_log` | `print_func_log` | `print_func_args` | "Waiting for…" line | Function name in log | Args/Kwargs in log | Elapsed time lines |
+|---|---|---|---|---|---|---|
+| `True`  | `True`  | `True`  | ✅ | ✅ | ✅ | ✅ |
+| `True`  | `True`  | `False` | ✅ | ✅ | ❌ | ✅ |
+| `True`  | `False` | `True`  | ✅ | ❌ | ❌ | ✅ |
+| `True`  | `False` | `False` | ✅ | ❌ | ❌ | ✅ |
+| `False` | `True`  | `True`  | ❌ | ❌ | ❌ | ❌ |
+| `False` | `True`  | `False` | ❌ | ❌ | ❌ | ❌ |
+| `False` | `False` | `True`  | ❌ | ❌ | ❌ | ❌ |
+| `False` | `False` | `False` | ❌ | ❌ | ❌ | ❌ |
+
+> **Note:** When `print_func_log` is `False`, arguments are never shown — even if `print_func_args` is `True` — because the entire function info block is omitted.
+
+## Advanced Usage
+
+### Logging in Exception Scenarios
+
+The `print_func_log` parameter also affects the error message inside `TimeoutExpiredError`. When a timeout expires:
+
+- If `print_func_log=True`, the exception message includes the function name, module, and (if `print_func_args=True`) arguments.
+- If `print_func_log=False`, the function info line in the exception message is empty.
+
+```python
+from timeout_sampler import TimeoutSampler, TimeoutExpiredError
+
+try:
+    for sample in TimeoutSampler(
+        wait_timeout=5,
+        sleep=1,
+        func=my_check,
+        print_func_log=True,
+    ):
+        if sample:
+            break
+except TimeoutExpiredError as e:
+    # str(e) includes: "Function: mymodule.my_check"
+    print(e)
+```
+
+See [TimeoutExpiredError Reference](api-exceptions.html) for details on exception attributes.
+
+### Logging with Lambda and Partial Functions
+
+`timeout-sampler` resolves function names through `functools.partial` wrappers and lambda expressions. When `print_func_log=True`, it follows partial chains to find the underlying function and displays lambda details including free variables and referenced names.
+
+```python
+from functools import partial
+
+check = partial(requests.get, "https://example.com")
+
+for sample in TimeoutSampler(
+    wait_timeout=10,
+    sleep=2,
+    func=check,
+    print_func_log=True,
+    print_func_args=True,
+):
+    if sample.ok:
+        break
+```
+
+The log will show the resolved underlying function name rather than `functools.partial`.
+
+### Selective Logging in Test Suites
+
+When writing tests, suppress logging to keep test output clean:
+
+```python
+@retry(wait_timeout=5, sleep=1, print_log=False)
+def wait_for_ready():
+    return service.is_ready()
+```
+
+> **Tip:** The test suite for `timeout-sampler` itself uses `print_log=False` throughout to avoid noisy output during test runs.
+
+## Troubleshooting
+
+**Logs appear even though I set `print_func_log=False`**
+The elapsed-time lines are controlled by `print_log`, not `print_func_log`. Set `print_log=False` to suppress all output, or leave `print_log=True` to keep only the timing information.
+
+**Arguments still appear in `TimeoutExpiredError` messages**
+The `print_func_args` parameter controls argument visibility in both the log output *and* the exception message. Verify that `print_func_args=False` is set on the `TimeoutSampler` or `@retry` call that raises the error.
+
+**I want to customize the logger itself**
+`timeout-sampler` uses `python-simple-logger` for its logging backend. The log parameters described on this page control *what* is logged, not *where* or *how*. To configure log levels, formats, or destinations, refer to `python-simple-logger` documentation.
+
+## Related Pages
+
+- [TimeoutSampler API](api-timeout-sampler.html)
+- [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
+- [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
+- [@retry Decorator API](api-retry-decorator.html)
+- [TimeoutExpiredError Reference](api-exceptions.html)
+
+---
+
+Source: tracking-elapsed-time.md
+
+# Tracking Elapsed Time with TimeoutWatch
+
+Track how much time remains in a custom polling loop, orchestration workflow, or multi-step operation using `TimeoutWatch` — a lightweight countdown timer that starts when you create it.
+
+## Prerequisites
+
+- `timeout-sampler` installed in your project (see [Getting Started with timeout-sampler](quickstart.html))
+
+## Quick Example
+
+```python
+from timeout_sampler import TimeoutWatch
+
+watch = TimeoutWatch(timeout=30)
+
+while watch.remaining_time() > 0:
+    result = do_something()
+    if result:
+        break
+```
+
+`TimeoutWatch` records the current time when instantiated and returns how many seconds are left each time you call `remaining_time()`.
+
+## Step-by-Step Usage
+
+### 1. Create a TimeoutWatch
+
+Pass the total number of seconds you want to track:
+
+```python
+from timeout_sampler import TimeoutWatch
+
+watch = TimeoutWatch(timeout=60)
+```
+
+The countdown starts immediately — there is no separate `start()` call.
+
+### 2. Check Remaining Time
+
+Call `remaining_time()` to get the seconds left:
+
+```python
+seconds_left = watch.remaining_time()
+print(f"{seconds_left:.1f} seconds remaining")
+```
+
+- Returns a `float` when time remains.
+- Returns `0` once the timeout has elapsed (it never returns a negative value).
+
+### 3. Use in a Loop
+
+Build a polling loop that runs until the timeout expires:
+
+```python
+from timeout_sampler import TimeoutWatch
+
+watch = TimeoutWatch(timeout=10)
+
+while watch.remaining_time() > 0:
+    status = check_service_health()
+    if status == "ready":
+        print("Service is up!")
+        break
+    time.sleep(1)
+else:
+    print("Timed out waiting for service.")
+```
+
+> **Tip:** The `while`/`else` pattern in Python lets you run the `else` block only when the loop condition becomes false — a clean way to handle timeouts without extra flags.
+
+### 4. Calculate Elapsed Time
+
+Since `TimeoutWatch` tracks remaining time, you can derive how much time has passed:
+
+```python
+watch = TimeoutWatch(timeout=30)
+
+# ... some work ...
+
+elapsed = watch.timeout - watch.remaining_time()
+print(f"Elapsed: {elapsed:.2f}s")
+```
+
+This is the same technique that `TimeoutSampler` uses internally to report elapsed time in its logs.
+
+## API Reference
+
+### `TimeoutWatch(timeout)`
+
+| Parameter | Type    | Description                          |
+|-----------|---------|--------------------------------------|
+| `timeout` | `float` | Total countdown duration in seconds |
+
+Creates a new watch and records the start time immediately.
+
+### `remaining_time()`
+
+```python
+def remaining_time(self) -> int | float
+```
+
+Returns the number of seconds left until the timeout expires. The return value is clamped to `0` — it will never be negative.
+
+| Condition                      | Return value            |
+|-------------------------------|-------------------------|
+| Called before timeout expires | Positive `float`        |
+| Called after timeout expires  | `0`                     |
+
+## Advanced Usage
+
+### Coordinating Multiple Steps Under One Budget
+
+When you need several sequential operations to fit within a shared time budget, create one `TimeoutWatch` and pass its remaining time to each step:
+
+```python
+from timeout_sampler import TimeoutSampler, TimeoutWatch
+
+overall = TimeoutWatch(timeout=120)
+
+# Step 1: Wait for database
+for sample in TimeoutSampler(
+    wait_timeout=overall.remaining_time(),
+    sleep=2,
+    func=check_database,
+):
+    if sample:
+        break
+
+# Step 2: Wait for cache (uses whatever time is left)
+for sample in TimeoutSampler(
+    wait_timeout=overall.remaining_time(),
+    sleep=2,
+    func=check_cache,
+):
+    if sample:
+        break
+```
+
+Each `TimeoutSampler` receives only the remaining portion of the overall budget, so the total wall-clock time never exceeds 120 seconds regardless of how long step 1 takes.
+
+> **Note:** If `remaining_time()` returns `0` before a step begins, the `TimeoutSampler` will raise a `TimeoutExpiredError` immediately. See [TimeoutExpiredError Reference](api-exceptions.html) for details on that exception.
+
+### Passing Fractional Timeouts
+
+`TimeoutWatch` accepts `float` values, so sub-second precision works out of the box:
+
+```python
+watch = TimeoutWatch(timeout=0.5)
+# Half-second budget
+```
+
+### Using TimeoutWatch Without TimeoutSampler
+
+`TimeoutWatch` has no dependency on `TimeoutSampler` — use it anywhere you need a simple countdown:
+
+```python
+from timeout_sampler import TimeoutWatch
+
+watch = TimeoutWatch(timeout=5)
+
+items = get_work_items()
+for item in items:
+    if watch.remaining_time() == 0:
+        print("Time budget exhausted, stopping early.")
+        break
+    process(item)
+```
+
+## Troubleshooting
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| `remaining_time()` returns `0` immediately | `timeout` was set to `0` or a negative value | Use a positive `timeout` value |
+| Elapsed time calculation seems wrong | You created the `TimeoutWatch` too early (e.g., at module import time) | Create the instance right before the work begins |
+| Loop never exits | Your loop body doesn't call `remaining_time()` on each iteration | Ensure the `while` condition re-evaluates `remaining_time()` every pass |
+
+## Related Pages
+
+- [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html) — the primary polling interface that uses `TimeoutWatch` under the hood
+- [TimeoutWatch API](api-timeout-watch.html) — full constructor and method reference
+- [TimeoutExpiredError Reference](api-exceptions.html) — the exception raised when time runs out
+
+## Related Pages
+
+- [TimeoutWatch API](api-timeout-watch.html)
+- [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
+- [TimeoutSampler API](api-timeout-sampler.html)
+- [TimeoutExpiredError Reference](api-exceptions.html)
+- [Common Polling Patterns](common-polling-patterns.html)
+
+---
+
+Source: common-polling-patterns.md
+
+# Common Polling Patterns
+
+Copy-paste recipes for the most frequent `timeout-sampler` use cases. Each recipe is self-contained and ready to drop into your project.
+
+> **Note:** All recipes assume you have already installed the package. See [Getting Started with timeout-sampler](quickstart.html) for installation instructions.
+
+## Wait for an API to Become Ready
+
+Poll an HTTP endpoint until it returns a successful response.
+
+```python
+import requests
+from timeout_sampler import TimeoutSampler
+
+for sample in TimeoutSampler(
+    wait_timeout=120,
+    sleep=5,
+    func=lambda: requests.get("http://localhost:8080/healthz").ok,
+    exceptions_dict={requests.ConnectionError: [], requests.Timeout: []},
+):
+    if sample:
+        break
+```
+
+The sampler calls the health-check endpoint every 5 seconds for up to 2 minutes. Connection errors and timeouts are silently retried thanks to `exceptions_dict`. The loop breaks as soon as the endpoint returns a 2xx response.
+
+> **Tip:** For long startup waits, increase `wait_timeout` and keep `sleep` between 2–10 seconds to avoid hammering the service.
+
+## Retry a Flaky Function with the @retry Decorator
+
+Automatically re-run a function until it returns a truthy value.
+
+```python
+from timeout_sampler import retry
+
+@retry(wait_timeout=30, sleep=2)
+def fetch_cluster_status():
+    import requests
+    resp = requests.get("https://api.example.com/cluster/status")
+    resp.raise_for_status()
+    return resp.json()["state"] == "ready"
+
+# Raises TimeoutExpiredError after 30s if the cluster never reaches "ready"
+fetch_cluster_status()
+```
+
+The `@retry` decorator wraps the function in a `TimeoutSampler` loop and returns the first truthy result. Use it when you want polling behavior without writing the iteration yourself.
+
+- The decorated function keeps its original signature — pass arguments as usual.
+- Any unhandled exception is immediately re-raised unless you add `exceptions_dict`.
+
+See [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html) for full parameter details.
+
+## Poll with a Partial Function
+
+Use `functools.partial` to poll a function that requires arguments without using `func_args` or keyword arguments.
+
+```python
+from functools import partial
+from timeout_sampler import TimeoutSampler
+
+def check_pod_phase(namespace, pod_name):
+    """Returns True when the pod is Running."""
+    import subprocess, json
+    result = subprocess.run(
+        ["kubectl", "get", "pod", pod_name, "-n", namespace, "-o", "json"],
+        capture_output=True, text=True,
+    )
+    pod = json.loads(result.stdout)
+    return pod["status"]["phase"] == "Running"
+
+poll_fn = partial(check_pod_phase, "default", "my-app-pod-7f4b9")
+
+for sample in TimeoutSampler(wait_timeout=90, sleep=3, func=poll_fn):
+    if sample:
+        break
+```
+
+`TimeoutSampler` resolves `partial` objects automatically when building log output, so function names and modules are logged correctly even through the wrapper. This pattern keeps the sampler call clean when the polled function has many parameters.
+
+## Pass Arguments via func_args and Keyword Arguments
+
+Provide positional and keyword arguments directly to `TimeoutSampler` without wrapping in `partial`.
+
+```python
+from timeout_sampler import TimeoutSampler
+
+def is_file_present(directory, filename, min_size_bytes=0):
+    import os
+    path = os.path.join(directory, filename)
+    return os.path.isfile(path) and os.path.getsize(path) >= min_size_bytes
+
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=2,
+    func=is_file_present,
+    func_args=("/tmp/exports", "report.csv"),
+    min_size_bytes=1024,
+):
+    if sample:
+        break
+```
+
+Positional arguments go into `func_args` as a tuple. Keyword arguments are passed directly as extra kwargs to the `TimeoutSampler` constructor, which forwards them to `func` on every call.
+
+## Ignore All Instances of an Exception
+
+Swallow every occurrence of a specific exception type during polling.
+
+```python
+from timeout_sampler import TimeoutSampler
+
+def get_resource():
+    import json, urllib.request
+    resp = urllib.request.urlopen("http://localhost:9090/resource")
+    return json.loads(resp.read())
+
+for sample in TimeoutSampler(
+    wait_timeout=30,
+    sleep=2,
+    func=get_resource,
+    exceptions_dict={ConnectionError: [], TimeoutError: []},
+):
+    if sample:
+        break
+```
+
+An empty list `[]` next to an exception class means *ignore all messages* for that exception. The sampler will keep retrying regardless of the exception's text content.
+
+See [Filtering and Handling Exceptions](handling-exceptions.html) for a full explanation of `exceptions_dict`.
+
+## Filter Exceptions by Message Text
+
+Only ignore exceptions whose message matches specific substrings.
+
+```python
+from timeout_sampler import TimeoutSampler
+
+def query_database():
+    import sqlite3
+    conn = sqlite3.connect("/var/data/app.db")
+    cursor = conn.execute("SELECT count(*) FROM jobs WHERE status = 'done'")
+    count = cursor.fetchone()[0]
+    conn.close()
+    if count == 0:
+        raise RuntimeError("no completed jobs yet")
+    return count
+
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=5,
+    func=query_database,
+    exceptions_dict={RuntimeError: ["no completed jobs yet"]},
+):
+    if sample:
+        print(f"Completed jobs: {sample}")
+        break
+```
+
+The sampler checks whether the raised exception's string representation *contains* any of the listed substrings. If a `RuntimeError` is raised with a different message (e.g., `"database locked"`), it will **not** be caught — it will immediately raise a `TimeoutExpiredError`.
+
+> **Warning:** Message matching uses substring `in` checks, not exact equality. The filter `"not found"` will also match `"resource not found in namespace"`.
+
+## Combine Multiple Exception Filters
+
+Handle several exception types, each with independent message filters.
+
+```python
+from timeout_sampler import TimeoutSampler
+
+def provision_vm():
+    """Calls a cloud API that may fail in multiple ways."""
+    # ... cloud SDK call ...
+    return {"id": "vm-abc123", "status": "running"}
+
+for sample in TimeoutSampler(
+    wait_timeout=300,
+    sleep=10,
+    func=provision_vm,
+    exceptions_dict={
+        ConnectionError: [],                          # retry on any connection issue
+        TimeoutError: [],                             # retry on any timeout
+        RuntimeError: ["quota exceeded", "retryable"],  # only retry these messages
+        PermissionError: ["token expired"],            # only retry on expired tokens
+    },
+):
+    if sample and sample.get("status") == "running":
+        print(f"VM provisioned: {sample['id']}")
+        break
+```
+
+Each exception class has its own message filter list. This lets you broadly retry transient network errors while being selective about application-level exceptions. Any exception type or message **not** listed will immediately surface as a `TimeoutExpiredError`.
+
+See [How Exception Matching Works](exception-matching-logic.html) for the inheritance-aware matching algorithm.
+
+## Leverage Exception Inheritance for Broad Matching
+
+Catch a parent exception class to automatically cover all its subclasses.
+
+```python
+from timeout_sampler import TimeoutSampler
+
+class ServiceError(Exception):
+    pass
+
+class TransientError(ServiceError):
+    pass
+
+class RateLimitError(ServiceError):
+    pass
+
+def call_external_service():
+    # ... API call that may raise TransientError or RateLimitError ...
+    return True
+
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=3,
+    func=call_external_service,
+    exceptions_dict={ServiceError: []},
+):
+    if sample:
+        break
+```
+
+Listing `ServiceError` in `exceptions_dict` catches both `TransientError` and `RateLimitError` because `TimeoutSampler` uses `isinstance()` to match exceptions. You don't need to enumerate every subclass individually.
+
+> **Tip:** Use broad parent-class matching for exception hierarchies you control, and specific-class matching for third-party exceptions where you want precise control.
+
+## Wait for a Return Value to Match a Condition
+
+Poll until the function returns a specific value, not just a truthy one.
+
+```python
+from timeout_sampler import TimeoutSampler
+
+def get_deployment_replicas():
+    """Returns the current number of ready replicas."""
+    import subprocess, json
+    result = subprocess.run(
+        ["kubectl", "get", "deployment", "web-api", "-o", "json"],
+        capture_output=True, text=True,
+    )
+    deploy = json.loads(result.stdout)
+    return deploy["status"].get("readyReplicas", 0)
+
+desired_replicas = 3
+
+for sample in TimeoutSampler(wait_timeout=120, sleep=5, func=get_deployment_replicas):
+    if sample == desired_replicas:
+        break
+```
+
+The `if` condition inside the loop is your match logic — you can check equality, membership, ranges, or any predicate. The sampler itself only yields; your code decides what constitutes success.
+
+## Silence All Log Output
+
+Disable logging for test suites or inner loops where verbosity is unwanted.
+
+```python
+from timeout_sampler import TimeoutSampler
+
+for sample in TimeoutSampler(
+    wait_timeout=10,
+    sleep=1,
+    func=lambda: True,
+    print_log=False,
+    print_func_log=False,
+):
+    if sample:
+        break
+```
+
+Setting `print_log=False` suppresses elapsed-time messages, and `print_func_log=False` suppresses function call details. Use both together for completely silent polling.
+
+See [Controlling Log Output](controlling-logging.html) for fine-grained logging options including `print_func_args`.
+
+## Track Remaining Time Across Multiple Polling Steps
+
+Use `TimeoutWatch` to share a single time budget across sequential polling operations.
+
+```python
+from timeout_sampler import TimeoutSampler, TimeoutWatch
+
+overall_timeout = TimeoutWatch(timeout=120)
+
+# Step 1: Wait for database
+for sample in TimeoutSampler(
+    wait_timeout=overall_timeout.remaining_time(),
+    sleep=3,
+    func=lambda: __import__("os").path.exists("/tmp/db.ready"),
+):
+    if sample:
+        break
+
+# Step 2: Wait for cache (uses remaining time from same budget)
+for sample in TimeoutSampler(
+    wait_timeout=overall_timeout.remaining_time(),
+    sleep=2,
+    func=lambda: __import__("os").path.exists("/tmp/cache.ready"),
+):
+    if sample:
+        break
+
+print(f"Both ready with {overall_timeout.remaining_time():.1f}s to spare")
+```
+
+`TimeoutWatch.remaining_time()` returns the seconds left from the original timeout, automatically accounting for elapsed time. Pass it as `wait_timeout` to give each subsequent step only the remaining budget.
+
+See [Tracking Elapsed Time with TimeoutWatch](tracking-elapsed-time.html) for the full `TimeoutWatch` API.
+
+## Catch TimeoutExpiredError and Inspect the Last Exception
+
+Access diagnostic information when polling fails.
+
+```python
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
+
+def unstable_lookup():
+    raise ConnectionError("connection refused on port 5432")
+
+try:
+    for sample in TimeoutSampler(
+        wait_timeout=10,
+        sleep=2,
+        func=unstable_lookup,
+        exceptions_dict={ConnectionError: []},
+    ):
+        if sample:
+            break
+except TimeoutExpiredError as e:
+    print(f"Polling failed: {e}")
+    print(f"Last exception type: {type(e.last_exp).__name__}")  # ConnectionError
+    print(f"Last exception message: {e.last_exp}")              # connection refused on port 5432
+    print(f"Total elapsed time: {e.elapsed_time}s")
+```
+
+`TimeoutExpiredError` exposes `last_exp` (the last exception raised by the polled function) and `elapsed_time` (total seconds spent polling). Use these for detailed error reporting or conditional recovery logic.
+
+See [TimeoutExpiredError Reference](api-exceptions.html) for all available attributes.
+
+## Related Pages
+
+- [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
+- [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
+- [Filtering and Handling Exceptions](handling-exceptions.html)
+- [Tracking Elapsed Time with TimeoutWatch](tracking-elapsed-time.html)
+- [How Exception Matching Works](exception-matching-logic.html)
+
+---
+
+Source: api-timeout-sampler.md
+
+# TimeoutSampler API
+
+Complete reference for the `TimeoutSampler` class — constructor parameters, iteration protocol, exception handling, and return semantics.
+
+```python
+from timeout_sampler import TimeoutSampler
+```
+
+## Constructor
+
+```python
+TimeoutSampler(
+    wait_timeout: float,
+    sleep: int,
+    func: Callable,
+    exceptions_dict: dict[type[Exception], list[str]] | None = None,
+    print_log: bool = True,
+    print_func_log: bool = True,
+    print_func_args: bool = True,
+    func_args: tuple[Any] | None = None,
+    **func_kwargs: Any,
+)
+```
+
+### Parameters
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `wait_timeout` | `float` | *(required)* | Maximum time in seconds to poll `func` before raising `TimeoutExpiredError`. |
+| `sleep` | `int` | *(required)* | Time in seconds to sleep between successive calls to `func`. |
+| `func` | `Callable` | *(required)* | The function to poll. Called as `func(*func_args, **func_kwargs)` on each iteration. |
+| `exceptions_dict` | `dict[type[Exception], list[str]] \| None` | `None` | Map of exception types to message-filter lists. When `None`, defaults to `{Exception: []}` (all exceptions ignored). See [How Exception Matching Works](exception-matching-logic.html). |
+| `print_log` | `bool` | `True` | Log elapsed time on each iteration and print a summary line at the start. |
+| `print_func_log` | `bool` | `True` | Include function module and name in the startup log message. |
+| `print_func_args` | `bool` | `True` | Include `func_args` and `func_kwargs` in the log when `print_func_log` is `True`. |
+| `func_args` | `tuple[Any] \| None` | `None` | Positional arguments forwarded to `func`. Stored as an empty tuple when `None`. |
+| `**func_kwargs` | `Any` | — | Keyword arguments forwarded to `func`. |
+
+> **Note:** When `exceptions_dict` is omitted (or `None`), it defaults to `{Exception: []}`, which silently ignores **all** exceptions raised inside `func` until the timeout expires. Pass an explicit empty dict `{}` to re-raise every exception immediately.
+
+### Example — Basic Construction
+
+```python
+from timeout_sampler import TimeoutSampler
+
+def check_service():
+    return {"status": "ready"}
+
+sampler = TimeoutSampler(
+    wait_timeout=30,
+    sleep=5,
+    func=check_service,
+)
+```
+
+### Example — Passing Arguments to `func`
+
+```python
+import requests
+from timeout_sampler import TimeoutSampler
+
+sampler = TimeoutSampler(
+    wait_timeout=60,
+    sleep=2,
+    func=requests.get,
+    func_args=("https://api.example.com/health",),
+    timeout=5,          # forwarded as requests.get(..., timeout=5)
+)
+```
+
+---
+
+## Iteration Protocol
+
+`TimeoutSampler` implements `__iter__`. Use it in a `for` loop. Each iteration calls `func(*func_args, **func_kwargs)` and yields the return value.
+
+```python
+def __iter__(self) -> Any
+```
+
+**Yields:** The return value of `func` on each successful call.
+
+**Raises:** [`TimeoutExpiredError`](api-exceptions.html) when the elapsed time exceeds `wait_timeout`.
+
+### Iteration Lifecycle
+
+1. A `TimeoutWatch` is created with `timeout=wait_timeout`.
+2. While remaining time > 0:
+   - `func(*func_args, **func_kwargs)` is called.
+   - The return value is **yielded** to the caller.
+   - After the caller processes the yielded value and continues the loop, the sampler sleeps for `sleep` seconds.
+3. If the loop exhausts the timeout without the caller breaking out, `TimeoutExpiredError` is raised.
+
+> **Warning:** `TimeoutSampler` does **not** evaluate the return value of `func`. The caller must inspect each yielded sample and `break` or `return` when a satisfactory value is found. Failing to break out of the loop will always result in `TimeoutExpiredError`.
+
+### Example — Iterate Until Success
+
+```python
+from timeout_sampler import TimeoutSampler
+
+def get_pod_status():
+    # returns "Pending", "Running", etc.
+    ...
+
+for sample in TimeoutSampler(wait_timeout=120, sleep=5, func=get_pod_status):
+    if sample == "Running":
+        break
+```
+
+### Example — Iterate with Logging Disabled
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=10,
+    sleep=1,
+    func=lambda: True,
+    print_log=False,
+):
+    if sample:
+        break
+```
+
+---
+
+## Exception Handling During Iteration
+
+When `func` raises an exception during iteration, `TimeoutSampler` checks it against `exceptions_dict` using `_should_ignore_exception` and `_is_exception_matched`.
+
+For a detailed walkthrough of the matching algorithm, see [How Exception Matching Works](exception-matching-logic.html).
+
+### `exceptions_dict` Format
+
+```python
+{
+    ExceptionClass: [message_substring_1, message_substring_2, ...],
+    AnotherException: [],   # empty list = match all messages
+}
+```
+
+| `exceptions_dict` value | Behavior |
+|---|---|
+| `None` (default) | Replaced internally with `{Exception: []}` — all exceptions are ignored until timeout. |
+| `{}` (empty dict) | Every exception is immediately re-raised as `TimeoutExpiredError`. |
+| `{ValueError: []}` | Any `ValueError` (or subclass) is ignored regardless of message text. |
+| `{ValueError: ["connection"]}` | `ValueError` is ignored only if `"connection"` appears in `str(exp)`. |
+| `{KeyError: ["x"], IndexError: ["y"]}` | Multiple exception types, each with independent message filters. |
+
+> **Tip:** The match uses `isinstance()`, so a parent class in `exceptions_dict` will also catch child classes. See [How Exception Matching Works](exception-matching-logic.html) for inheritance examples.
+
+### Exception Handling Outcomes
+
+| Scenario | Result |
+|---|---|
+| Exception class (or parent) is in `exceptions_dict` and message matches (or filter list is empty) | Exception is **ignored**; sampler sleeps and retries. |
+| Exception class is in `exceptions_dict` but message does **not** match any filter string | `TimeoutExpiredError` is raised **immediately**. |
+| Exception class is **not** in `exceptions_dict` (and no parent class is listed) | `TimeoutExpiredError` is raised **immediately**. |
+| No exception; timeout expires | `TimeoutExpiredError` is raised after the loop ends. |
+
+### Example — Ignore Specific Exceptions
+
+```python
+from timeout_sampler import TimeoutSampler
+
+for sample in TimeoutSampler(
+    wait_timeout=30,
+    sleep=2,
+    func=my_flaky_func,
+    exceptions_dict={ConnectionError: [], TimeoutError: []},
+):
+    if sample:
+        break
+```
+
+### Example — Filter by Exception Message
+
+```python
+from timeout_sampler import TimeoutSampler
+
+for sample in TimeoutSampler(
+    wait_timeout=30,
+    sleep=2,
+    func=my_func,
+    exceptions_dict={ValueError: ["not ready", "try again"]},
+):
+    if sample:
+        break
+```
+
+A `ValueError("resource not ready")` is ignored (contains `"not ready"`). A `ValueError("invalid input")` causes an immediate `TimeoutExpiredError`.
+
+---
+
+## Internal Methods
+
+These methods are not part of the public API but are documented for contributor reference.
+
+### `_is_exception_matched`
+
+```python
+@staticmethod
+_is_exception_matched(exp: Exception, exception_messages: list[str]) -> bool
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `exp` | `Exception` | The exception instance raised by `func`. |
+| `exception_messages` | `list[str]` | List of allowed substrings. Empty list matches everything. |
+
+**Returns:** `True` if `exception_messages` is empty, or if any non-empty string in the list is a substring of `str(exp)`. `False` otherwise.
+
+> **Note:** Empty strings in the message list are explicitly skipped — they will not produce a match.
+
+### `_should_ignore_exception`
+
+```python
+_should_ignore_exception(self, exp: Exception) -> bool
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `exp` | `Exception` | The exception instance raised by `func`. |
+
+**Returns:** `True` if the exception should be **ignored** (matches an entry in `exceptions_dict` via `isinstance()` and message filtering). `False` if the exception should be re-raised.
+
+### `_get_func_info`
+
+```python
+_get_func_info(self, _func: Callable, type_: str) -> Any
+```
+
+Resolves function metadata (`__module__`, `__name__`) for regular, `partial`, and `lambda` functions. Used internally to build log messages.
+
+### `_func_log` (property)
+
+```python
+@property
+_func_log(self) -> str
+```
+
+**Returns:** A formatted string describing the function call, e.g. `"Function: mymodule.my_func Args: (1, 2) Kwargs: {'key': 'val'}"`. Controlled by `print_func_log` and `print_func_args`.
+
+### `_get_exception_log`
+
+```python
+_get_exception_log(self, exp: Exception | None = None) -> str
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `exp` | `Exception \| None` | The last exception raised, or `None` if no exception occurred. |
+
+**Returns:** A multi-line string containing the timeout value, function info (if `print_func_log` is `True`), and the last exception class name and message. This string becomes the `value` attribute of the raised `TimeoutExpiredError`.
+
+---
+
+## Raised Exceptions
+
+`TimeoutSampler` raises only one exception type: [`TimeoutExpiredError`](api-exceptions.html).
+
+| Condition | `last_exp` | `elapsed_time` |
+|---|---|---|
+| Timeout expires with no exception from `func` | `None` | `None` |
+| Timeout expires after ignored exceptions | Last ignored `Exception` instance | `None` |
+| Exception not matched by `exceptions_dict` | The unmatched `Exception` instance | Seconds elapsed at time of exception |
+
+See [TimeoutExpiredError Reference](api-exceptions.html) for the full attribute and string-representation reference.
+
+---
+
+## Logging Behavior
+
+Logging is emitted via `simple_logger` at `INFO` level.
+
+| Flag | Default | Effect when `True` |
+|---|---|---|
+| `print_log` | `True` | Logs a startup message with wait/sleep times and logs elapsed time after each iteration where `func` raises an exception or after yield. |
+| `print_func_log` | `True` | Appends function module and name to the startup log message. Requires `print_log=True`. |
+| `print_func_args` | `True` | Includes `Args` and `Kwargs` in the function log. Requires `print_func_log=True`. |
+
+See [Controlling Log Output](controlling-logging.html) for usage examples and sample output.
+
+---
+
+## Import Path
+
+```python
+from timeout_sampler import TimeoutSampler
+```
+
+The class is exported from the top-level `timeout_sampler` package (`timeout_sampler/__init__.py`).
+
+## Related Pages
+
+- [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
+- [TimeoutExpiredError Reference](api-exceptions.html)
+- [How Exception Matching Works](exception-matching-logic.html)
+- [Controlling Log Output](controlling-logging.html)
+- [TimeoutWatch API](api-timeout-watch.html)
+
+---
+
+Source: api-retry-decorator.md
+
+# @retry Decorator API
+
+The `retry` decorator wraps a function so it is automatically polled via [`TimeoutSampler`](api-timeout-sampler.html) until it returns a truthy value or the timeout expires.
+
+## Import
+
+```python
+from timeout_sampler import retry
+```
+
+## Signature
+
+```python
+def retry(
+    wait_timeout: int,
+    sleep: int,
+    exceptions_dict: dict[type[Exception], list[str]] | None = None,
+    print_log: bool = True,
+    print_func_log: bool = True,
+    print_func_args: bool = True,
+) -> Callable
+```
+
+## Parameters
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `wait_timeout` | `int` | *(required)* | Maximum time in seconds to keep retrying the decorated function. |
+| `sleep` | `int` | *(required)* | Time in seconds to wait between each call to the decorated function. |
+| `exceptions_dict` | `dict[type[Exception], list[str]] \| None` | `None` | Exception filter map. When `None`, defaults to `{Exception: []}` (all exceptions ignored). See [How Exception Matching Works](exception-matching-logic.html). |
+| `print_log` | `bool` | `True` | When `True`, logs elapsed time and timeout configuration. See [Controlling Log Output](controlling-logging.html). |
+| `print_func_log` | `bool` | `True` | When `True`, includes function module and name in log output. |
+| `print_func_args` | `bool` | `True` | When `True` (and `print_func_log` is also `True`), includes function arguments and keyword arguments in log output. |
+
+## Parameter Mapping to TimeoutSampler
+
+Every `@retry` parameter maps directly to a [`TimeoutSampler`](api-timeout-sampler.html) constructor parameter of the same name. The decorator also forwards the decorated function's positional arguments as `func_args` and keyword arguments as `**func_kwargs`.
+
+| `@retry` parameter | `TimeoutSampler` parameter |
+|---|---|
+| `wait_timeout` | `wait_timeout` |
+| `sleep` | `sleep` |
+| `exceptions_dict` | `exceptions_dict` |
+| `print_log` | `print_log` |
+| `print_func_log` | `print_func_log` |
+| `print_func_args` | `print_func_args` |
+| *(decorated function)* | `func` |
+| *(positional args at call time)* | `func_args` |
+| *(keyword args at call time)* | `**func_kwargs` |
+
+## Return Value
+
+The decorator returns the first **truthy** value returned by the decorated function. If the function never returns a truthy value within `wait_timeout` seconds, a [`TimeoutExpiredError`](api-exceptions.html) is raised.
+
+> **Note:** A return value of `False`, `None`, `0`, `""`, `[]`, `{}`, or any other falsy value is treated as a failed attempt and triggers another retry. Only truthy values cause `@retry` to stop and return.
+
+## Exceptions
+
+| Exception | Condition |
+|---|---|
+| [`TimeoutExpiredError`](api-exceptions.html) | Raised when the decorated function does not return a truthy value within `wait_timeout` seconds, or when an unmatched exception is raised by the function. |
+
+> **Warning:** When `exceptions_dict` is `None` (the default), the internal `TimeoutSampler` uses `{Exception: []}`, which silently catches **all** exceptions during polling. Pass an explicit empty dict `{}` to let every exception propagate immediately.
+
+## Examples
+
+### Basic Usage
+
+```python
+from timeout_sampler import retry
+
+@retry(wait_timeout=30, sleep=5)
+def wait_for_service():
+    response = requests.get("http://localhost:8080/health")
+    return response.status_code == 200
+
+# Polls every 5 seconds for up to 30 seconds.
+# Returns True on success, raises TimeoutExpiredError on timeout.
+wait_for_service()
+```
+
+### With Arguments
+
+Arguments passed at call time are forwarded to the decorated function:
+
+```python
+from timeout_sampler import retry
+
+@retry(wait_timeout=10, sleep=2)
+def check_status(host, port, path="/health"):
+    response = requests.get(f"http://{host}:{port}{path}")
+    return response.ok
+
+# 'host' and 'port' are forwarded as func_args;
+# 'path' is forwarded as a keyword argument.
+check_status("localhost", 8080, path="/ready")
+```
+
+### Filtering Specific Exceptions
+
+```python
+from timeout_sampler import retry
+
+@retry(
+    wait_timeout=20,
+    sleep=3,
+    exceptions_dict={ConnectionError: [], TimeoutError: ["timed out"]},
+)
+def fetch_data():
+    return requests.get("http://api.example.com/data").json()
+
+# ConnectionError with any message is ignored during polling.
+# TimeoutError is ignored only if its message contains "timed out".
+# All other exceptions propagate immediately.
+result = fetch_data()
+```
+
+See [Filtering and Handling Exceptions](handling-exceptions.html) for the full exception matching semantics.
+
+### Suppressing Log Output
+
+```python
+from timeout_sampler import retry
+
+@retry(wait_timeout=5, sleep=1, print_log=False)
+def quiet_check():
+    return some_condition()
+```
+
+### Returning a Non-Boolean Truthy Value
+
+```python
+from timeout_sampler import retry
+
+@retry(wait_timeout=15, sleep=2)
+def get_items():
+    items = fetch_items_from_queue()
+    return items  # Returns the list when non-empty; retries on empty list
+
+result = get_items()  # result is the first non-empty list returned
+```
+
+### Handling TimeoutExpiredError
+
+```python
+from timeout_sampler import retry, TimeoutExpiredError
+
+@retry(wait_timeout=5, sleep=1)
+def unreliable():
+    return False
+
+try:
+    unreliable()
+except TimeoutExpiredError as e:
+    print(f"Gave up after {e.elapsed_time}s")
+    print(f"Last exception: {e.last_exp}")
+```
+
+See [TimeoutExpiredError Reference](api-exceptions.html) for all available attributes on the exception.
+
+## Related Pages
+
+- [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
+- [TimeoutSampler API](api-timeout-sampler.html)
+- [TimeoutExpiredError Reference](api-exceptions.html)
+- [Filtering and Handling Exceptions](handling-exceptions.html)
+- [How Exception Matching Works](exception-matching-logic.html)
+
+---
+
+Source: api-timeout-watch.md
+
+# TimeoutWatch API
+
+## Overview
+
+`TimeoutWatch` is a lightweight time-tracking class that records a start time on creation and computes remaining time on demand. It is used internally by [`TimeoutSampler`](api-timeout-sampler.html) and can be used independently in custom polling or orchestration workflows.
+
+## Import
+
+```python
+from timeout_sampler import TimeoutWatch
+```
+
+## Class: `TimeoutWatch`
+
+```python
+class TimeoutWatch(timeout: float) -> None
+```
+
+A time counter that determines the time remaining since the start of a given interval. The clock starts immediately upon construction.
+
+---
+
+### Constructor
+
+```python
+TimeoutWatch(timeout: float)
+```
+
+Creates a new `TimeoutWatch` instance. Records the current time as the start time and stores the specified timeout duration.
+
+#### Parameters
+
+| Name      | Type    | Default | Description                                      |
+|-----------|---------|---------|--------------------------------------------------|
+| `timeout` | `float` | —       | Duration of the interval in seconds to track.     |
+
+#### Attributes Set
+
+| Attribute    | Type    | Description                                              |
+|--------------|---------|----------------------------------------------------------|
+| `timeout`    | `float` | The timeout duration passed to the constructor.           |
+| `start_time` | `float` | The wall-clock time (`time.time()`) captured at creation. |
+
+#### Example
+
+```python
+from timeout_sampler import TimeoutWatch
+
+watch = TimeoutWatch(timeout=30)
+print(watch.timeout)      # 30
+print(watch.start_time)   # e.g. 1750600000.123456
+```
+
+---
+
+### Method: `remaining_time`
+
+```python
+remaining_time() -> int | float
+```
+
+Returns the number of seconds remaining in the timeout interval, calculated as:
+
+```
+max(0, start_time + timeout - current_time)
+```
+
+The return value never goes below `0`.
+
+#### Parameters
+
+None.
+
+#### Return Value
+
+| Type          | Description                                                                 |
+|---------------|-----------------------------------------------------------------------------|
+| `int \| float` | Seconds remaining. Returns `0` (or `0.0`) once the timeout has elapsed.    |
+
+#### Example
+
+```python
+import time
+from timeout_sampler import TimeoutWatch
+
+watch = TimeoutWatch(timeout=5)
+
+time.sleep(2)
+print(watch.remaining_time())  # ≈ 3.0
+
+time.sleep(4)
+print(watch.remaining_time())  # 0
+```
+
+#### Use in a Custom Polling Loop
+
+```python
+import time
+from timeout_sampler import TimeoutWatch
+
+watch = TimeoutWatch(timeout=10)
+
+while watch.remaining_time() > 0:
+    result = check_some_condition()
+    if result:
+        break
+    time.sleep(1)
+else:
+    raise RuntimeError("Condition not met within 10 seconds")
+```
+
+> **Note:** `remaining_time()` is guaranteed to return `0` (never a negative value) once the timeout has elapsed. You can safely use `> 0` as the loop condition.
+
+---
+
+## Relationship to TimeoutSampler
+
+`TimeoutSampler` creates a `TimeoutWatch` internally to manage its iteration deadline. If you need a polling loop with built-in exception handling and logging, use [`TimeoutSampler`](api-timeout-sampler.html) instead. Use `TimeoutWatch` directly when you need manual control over the polling logic.
+
+For a usage-oriented walkthrough, see [Tracking Elapsed Time with TimeoutWatch](tracking-elapsed-time.html).
+
+---
+
+## Computing Elapsed Time
+
+`TimeoutWatch` does not provide a dedicated elapsed-time method. Compute it by subtracting the remaining time from the original timeout:
+
+```python
+from timeout_sampler import TimeoutWatch
+
+watch = TimeoutWatch(timeout=30)
+
+# ... some work ...
+
+elapsed = watch.timeout - watch.remaining_time()
+print(f"Elapsed: {elapsed:.2f}s")
+```
+
+> **Tip:** This is the same pattern [`TimeoutSampler`](api-timeout-sampler.html) uses internally to populate the `elapsed_time` attribute on [`TimeoutExpiredError`](api-exceptions.html).
+
+## Related Pages
+
+- [Tracking Elapsed Time with TimeoutWatch](tracking-elapsed-time.html)
+- [TimeoutSampler API](api-timeout-sampler.html)
+- [TimeoutExpiredError Reference](api-exceptions.html)
+- [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
+- [Common Polling Patterns](common-polling-patterns.html)
+
+---
+
+Source: api-exceptions.md
+
+# TimeoutExpiredError Reference
+
+`TimeoutExpiredError` is the exception raised by [`TimeoutSampler`](api-timeout-sampler.html) and the [`@retry` decorator](api-retry-decorator.html) when the polled function does not produce a truthy result within the specified timeout, or when a raised exception is not matched by the configured `exceptions_dict`.
+
+## Import
+
+```python
+from timeout_sampler import TimeoutExpiredError
+```
+
+## Class Signature
+
+```python
+class TimeoutExpiredError(Exception):
+    def __init__(
+        self,
+        value: str,
+        last_exp: Exception | None = None,
+        elapsed_time: float | None = None,
+    ) -> None: ...
+```
+
+`TimeoutExpiredError` is a direct subclass of `Exception`.
+
+## Constructor Parameters
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `value` | `str` | *(required)* | Message describing the timeout context. Includes timeout duration, function info, and the last exception name/text. |
+| `last_exp` | `Exception \| None` | `None` | The last exception caught during polling, if any. `None` when the function returned without raising but never produced a truthy result. |
+| `elapsed_time` | `float \| None` | `None` | Seconds elapsed from the start of polling until the error was raised. `None` when not tracked (e.g., on a natural timeout expiry at the end of the iteration loop). |
+
+## Instance Attributes
+
+| Attribute | Type | Description |
+|---|---|---|
+| `value` | `str` | The descriptive message passed to the constructor. |
+| `last_exp` | `Exception \| None` | Reference to the last exception raised by the polled function. Useful for inspecting the root cause of a timeout. |
+| `elapsed_time` | `float \| None` | Wall-clock seconds elapsed since polling started. Present when the timeout was triggered mid-iteration; `None` when the timeout watch expired naturally at the loop boundary. |
+
+### Accessing `last_exp`
+
+```python
+from timeout_sampler import TimeoutSampler, TimeoutExpiredError
+
+try:
+    for sample in TimeoutSampler(
+        wait_timeout=5,
+        sleep=1,
+        func=my_flaky_function,
+        exceptions_dict={ConnectionError: []},
+    ):
+        if sample:
+            break
+except TimeoutExpiredError as exp:
+    if exp.last_exp is not None:
+        print(f"Root cause: {type(exp.last_exp).__name__}: {exp.last_exp}")
+    else:
+        print("Function never raised, but never returned truthy either")
+```
+
+### Accessing `elapsed_time`
+
+```python
+from timeout_sampler import TimeoutSampler, TimeoutExpiredError
+
+try:
+    for sample in TimeoutSampler(
+        wait_timeout=30,
+        sleep=2,
+        func=check_service_health,
+    ):
+        if sample:
+            break
+except TimeoutExpiredError as exp:
+    if exp.elapsed_time is not None:
+        print(f"Failed after {exp.elapsed_time:.2f} seconds")
+```
+
+## String Representation (`__str__`)
+
+`str(exp)` returns a formatted message. The format depends on whether `elapsed_time` is set.
+
+**Without `elapsed_time`:**
+
+```
+Timed Out: <value>.
+```
+
+**With `elapsed_time`:**
+
+```
+Timed Out: <value>.
+Elapsed time: <seconds> [<H:MM:SS>]
+```
+
+The elapsed-time line uses `datetime.timedelta` for the human-readable duration.
+
+### Example Output
+
+```python
+from timeout_sampler import TimeoutExpiredError
+
+# Minimal
+err = TimeoutExpiredError(value="10")
+print(str(err))
+# Timed Out: 10.
+
+# With elapsed time
+err = TimeoutExpiredError(value="10", elapsed_time=7.53)
+print(str(err))
+# Timed Out: 10.
+# Elapsed time: 7.53 [0:00:07.530000]
+```
+
+> **Note:** When `TimeoutExpiredError` is raised by `TimeoutSampler`, the `value` string contains multiple lines with the timeout duration, function info, and last exception details. The exact format is an internal detail of `TimeoutSampler._get_exception_log()`. See [TimeoutSampler API](api-timeout-sampler.html) for iteration behavior.
+
+### Realistic `str()` from `TimeoutSampler`
+
+When `TimeoutSampler` raises `TimeoutExpiredError`, the string representation typically looks like:
+
+```
+Timed Out: 5
+Function: my_module.check_service_health
+Last exception: ConnectionError: connection refused.
+Elapsed time: 4.02 [0:00:04.020000]
+```
+
+## When `elapsed_time` Is Set vs. `None`
+
+| Scenario | `elapsed_time` | `last_exp` |
+|---|---|---|
+| Exception raised mid-iteration that is **not** matched by `exceptions_dict` | Set (seconds since start) | The unmatched exception |
+| Matched exception keeps being raised until timeout expires naturally | `None` | The last matched exception |
+| Function returns a non-truthy value until timeout expires naturally | `None` | `None` |
+
+> **Tip:** To guarantee `elapsed_time` is always available in your error handling, check for `None` before using it in arithmetic or formatting.
+
+## Catching `TimeoutExpiredError`
+
+`TimeoutExpiredError` can be caught as itself or as its parent `Exception`:
+
+```python
+from timeout_sampler import TimeoutExpiredError
+
+# Specific catch
+try:
+    for sample in sampler:
+        if sample:
+            break
+except TimeoutExpiredError:
+    print("Polling timed out")
+
+# Broader catch (also works)
+try:
+    for sample in sampler:
+        if sample:
+            break
+except Exception as e:
+    if isinstance(e, TimeoutExpiredError):
+        print(f"Timeout with last_exp={e.last_exp}")
+```
+
+## Constructing Manually
+
+You can construct `TimeoutExpiredError` directly for testing or custom polling logic:
+
+```python
+from timeout_sampler import TimeoutExpiredError
+
+# Simulate a timeout with a root cause
+root_cause = ConnectionError("connection refused")
+err = TimeoutExpiredError(
+    value="30",
+    last_exp=root_cause,
+    elapsed_time=29.87,
+)
+
+assert err.value == "30"
+assert err.last_exp is root_cause
+assert err.elapsed_time == 29.87
+assert "Timed Out: 30." in str(err)
+assert "Elapsed time: 29.87" in str(err)
+```
+
+## Related Pages
+
+- [TimeoutSampler API](api-timeout-sampler.html) — constructor parameters and iteration behavior that produce `TimeoutExpiredError`
+- [@retry Decorator API](api-retry-decorator.html) — decorator that raises `TimeoutExpiredError` on timeout
+- [Filtering and Handling Exceptions](handling-exceptions.html) — configuring `exceptions_dict` to control which exceptions trigger an immediate `TimeoutExpiredError` vs. being silently retried
+- [How Exception Matching Works](exception-matching-logic.html) — the algorithm that determines whether an exception is matched or causes `TimeoutExpiredError`
+
+## Related Pages
+
+- [Filtering and Handling Exceptions](handling-exceptions.html)
+- [TimeoutSampler API](api-timeout-sampler.html)
+- [@retry Decorator API](api-retry-decorator.html)
+- [How Exception Matching Works](exception-matching-logic.html)
+- [Tracking Elapsed Time with TimeoutWatch](tracking-elapsed-time.html)
+
+---
+
+Source: exception-matching-logic.md
+
+# How Exception Matching Works
+
+When your polled function raises an exception inside a `TimeoutSampler` loop, the sampler must decide: *should it swallow the error and keep retrying, or should it stop immediately?* This decision is made by the **exception matching algorithm** — an inheritance-aware, message-filtered check that gives you precise control over which failures are retried and which are surfaced right away.
+
+Understanding this algorithm helps you avoid two common pitfalls: accidentally retrying an exception you should have surfaced (hiding real bugs), or accidentally re-raising a transient error you meant to ignore (breaking your polling loop too early).
+
+## The Big Picture
+
+Every time an exception is raised inside the function passed to `TimeoutSampler`, the sampler runs through a two-stage decision process:
+
+| Stage | What It Checks | Outcome |
+|-------|---------------|---------|
+| **1. Type matching** | Is the raised exception an instance of any class listed in `exceptions_dict`? This uses Python's `isinstance()`, so subclass relationships are honored. | If no match → **re-raise immediately** |
+| **2. Message filtering** | Does the exception's string representation contain at least one of the allowed message substrings for the matched class? | If match → **ignore and retry**; if no message match → **re-raise immediately** |
+
+If the exception passes both stages, the sampler sleeps and calls the function again. If it fails either stage, the sampler wraps the original exception in a `TimeoutExpiredError` and raises it.
+
+## The Three Outcome Categories
+
+When an exception is raised inside your polled function, exactly one of these three things happens:
+
+### 1. Exact Class Match — Continue Polling
+
+The raised exception's class is explicitly listed as a key in `exceptions_dict`, and the message filter passes (or is empty).
+
+```python
+from timeout_sampler import TimeoutSampler
+
+# ValueError is explicitly listed, empty list means "match any message"
+exceptions_dict = {ValueError: []}
+
+for sample in TimeoutSampler(
+    wait_timeout=10,
+    sleep=1,
+    func=might_raise_value_error,
+    exceptions_dict=exceptions_dict,
+):
+    if sample:
+        break
+# Any ValueError is silently retried until timeout
+```
+
+### 2. Inherited Class Match — Continue Polling
+
+The raised exception is a *subclass* of a class listed in `exceptions_dict`. The sampler uses `isinstance()` internally, so the full inheritance chain is checked.
+
+```python
+# Imagine this hierarchy:
+# class AExampleError(Exception): ...
+# class BExampleError(AExampleError): ...
+
+exceptions_dict = {AExampleError: []}
+
+# If the function raises BExampleError, it still matches
+# because isinstance(BExampleError(), AExampleError) is True
+```
+
+### 3. No Match — Re-raise Immediately
+
+The raised exception is neither listed in `exceptions_dict` nor a subclass of any listed class. The sampler wraps it in a `TimeoutExpiredError` and re-raises immediately — it does *not* wait for the timeout to expire.
+
+```python
+exceptions_dict = {ValueError: []}
+
+# If the function raises KeyError, it does NOT match ValueError
+# and is NOT a subclass of ValueError → re-raised immediately
+```
+
+> **Warning:** If you pass an empty `exceptions_dict` (`{}`), **no exceptions will be matched**, so *every* exception will cause an immediate re-raise. This is different from the default behavior (see below).
+
+## How Message Filtering Works
+
+Each key in `exceptions_dict` maps to a list of allowed message substrings. The message filter runs *after* the type match succeeds:
+
+| `exception_messages` value | Behavior |
+|---|---|
+| `[]` (empty list) | **All messages match.** Any exception of this type is ignored. |
+| `["connection refused", "timeout"]` | The exception's `str()` representation must contain at least one of these substrings. |
+| `[""]` (list with empty string) | **Nothing matches.** An empty string is explicitly excluded as a safeguard. |
+
+The matching logic is a substring check using Python's `in` operator:
+
+```python
+# Internal logic (simplified):
+any(msg and msg in str(exp) for msg in exception_messages)
+```
+
+### Message Filtering Examples
+
+```python
+from timeout_sampler import TimeoutSampler
+
+# Match only ConnectionError with "refused" in the message
+exceptions_dict = {ConnectionError: ["refused"]}
+
+# ✅ ConnectionError("Connection refused by host")  → retried (contains "refused")
+# ❌ ConnectionError("DNS resolution failed")       → re-raised (no substring match)
+# ❌ ValueError("Connection refused")               → re-raised (wrong type)
+```
+
+```python
+# Match ValueError with ANY of several messages
+exceptions_dict = {ValueError: ["not ready", "still loading"]}
+
+# ✅ ValueError("Resource not ready")     → retried
+# ✅ ValueError("Page still loading")     → retried
+# ❌ ValueError("Invalid input")          → re-raised
+```
+
+> **Tip:** Message filters are case-sensitive. `"Refused"` will not match an exception with the message `"connection refused"`. Choose your substrings carefully.
+
+## The Default `exceptions_dict`
+
+If you do not pass an `exceptions_dict` to `TimeoutSampler`, the default value is:
+
+```python
+{Exception: []}
+```
+
+Since every exception in Python inherits from `Exception`, this means **all exceptions are silently retried** until the timeout expires. This is the most permissive setting.
+
+```python
+# These two are equivalent:
+TimeoutSampler(wait_timeout=10, sleep=1, func=my_func)
+TimeoutSampler(wait_timeout=10, sleep=1, func=my_func, exceptions_dict={Exception: []})
+```
+
+> **Note:** The `@retry` decorator also defaults to `{Exception: []}` when `exceptions_dict` is not specified. See [@retry Decorator API](api-retry-decorator.html) for the full parameter list.
+
+## Step-by-Step: What Happens When an Exception Is Raised
+
+1. Your function (`func`) raises an exception `exp`.
+2. The sampler records `exp` as `last_exp` and calculates `elapsed_time`.
+3. The sampler calls `_should_ignore_exception(exp)`, which iterates over every key in `exceptions_dict`:
+   - For each key class, it checks `isinstance(exp, key)`.
+   - On the first type match, it retrieves the message list and calls `_is_exception_matched(exp, messages)`.
+   - If both type and message match → return `True` (ignore the exception).
+4. **If ignored:** the sampler sleeps for `sleep` seconds, then calls `func` again.
+5. **If not ignored:** the sampler raises `TimeoutExpiredError`, attaching `exp` as `last_exp` and the current `elapsed_time`.
+
+> **Note:** When an exception is not matched, the `TimeoutExpiredError` is raised **immediately** — the sampler does not wait for the full timeout to expire. This means unrecognized exceptions surface fast.
+
+## Multiple Exception Classes
+
+You can list multiple exception classes in `exceptions_dict`. The sampler checks them in iteration order:
+
+```python
+exceptions_dict = {
+    ConnectionError: ["refused", "reset"],
+    TimeoutError: [],
+    ValueError: ["not ready"],
+}
+```
+
+The first matching class wins. Once a type match is found, only that class's message list is checked. If the message filter fails for that class, the exception is re-raised — the sampler does **not** continue checking other classes in the dict.
+
+> **Warning:** Because `isinstance()` honors inheritance, ordering can matter when your exception classes share a parent-child relationship. If both `AExampleError` and `BExampleError(AExampleError)` are in the dict, the one that appears first during iteration will be checked first. Place more specific (child) classes before more general (parent) classes to ensure the correct message filter is applied.
+
+## How It Affects `TimeoutExpiredError`
+
+When an exception is re-raised (either immediately or at timeout expiry), it is wrapped in a `TimeoutExpiredError`. The original exception is accessible through the `last_exp` attribute:
+
+```python
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
+
+try:
+    for sample in TimeoutSampler(
+        wait_timeout=5,
+        sleep=1,
+        func=my_unstable_func,
+        exceptions_dict={ConnectionError: []},
+    ):
+        if sample:
+            break
+except TimeoutExpiredError as e:
+    print(e.last_exp)       # The original exception (e.g., ConnectionError)
+    print(e.elapsed_time)   # Seconds elapsed before the error
+```
+
+See [TimeoutExpiredError Reference](api-exceptions.html) for the full attribute and method reference.
+
+## Quick Reference Table
+
+| Scenario | `exceptions_dict` | Raised Exception | Result |
+|---|---|---|---|
+| Default — catch all | `{Exception: []}` | Any exception | Retry until timeout |
+| Specific type, any message | `{ValueError: []}` | `ValueError("anything")` | Retry |
+| Specific type, filtered message | `{ValueError: ["not ready"]}` | `ValueError("not ready yet")` | Retry |
+| Specific type, wrong message | `{ValueError: ["not ready"]}` | `ValueError("bad input")` | Re-raise immediately |
+| Subclass match | `{Exception: []}` | `ValueError()` | Retry (ValueError inherits Exception) |
+| Parent does not match child | `{ValueError: []}` | `Exception()` | Re-raise immediately |
+| Empty dict — catch nothing | `{}` | Any exception | Re-raise immediately |
+
+## Related Pages
+
+- [Filtering and Handling Exceptions](handling-exceptions.html) — practical guide to configuring `exceptions_dict` for common scenarios
+- [TimeoutSampler API](api-timeout-sampler.html) — full constructor parameters and iteration behavior reference
+- [TimeoutExpiredError Reference](api-exceptions.html) — attributes and string representation of the error raised on timeout or unmatched exceptions
+- [@retry Decorator API](api-retry-decorator.html) — how `exceptions_dict` is passed through the decorator
+- [Common Polling Patterns](common-polling-patterns.html) — copy-paste recipes combining exception filters with polling strategies
+
+## Related Pages
+
+- [Filtering and Handling Exceptions](handling-exceptions.html)
+- [TimeoutSampler API](api-timeout-sampler.html)
+- [TimeoutExpiredError Reference](api-exceptions.html)
+- [@retry Decorator API](api-retry-decorator.html)
+- [Common Polling Patterns](common-polling-patterns.html)
+
+---
