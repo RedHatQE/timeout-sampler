@@ -290,3 +290,24 @@ class TestCallableExceptionFilter:
                 print_log=False,
                 status=502,
             )
+
+    @pytest.mark.parametrize(
+        "invalid_filter",
+        [
+            pytest.param("", id="test_empty_string_filter_rejected"),
+            pytest.param(123, id="test_int_filter_rejected"),
+            pytest.param(None, id="test_none_filter_rejected"),
+            pytest.param(12.5, id="test_float_filter_rejected"),
+        ],
+    )
+    def test_invalid_filter_raises_type_error(self, invalid_filter):
+        """Invalid filter items (empty string, non-str, non-callable) should raise TypeError at init."""
+        with pytest.raises(TypeError):
+            TimeoutSampler(
+                wait_timeout=1,
+                sleep=1,
+                func=self._raise_status_error,
+                exceptions_dict={StatusError: [invalid_filter]},
+                print_log=False,
+                status=502,
+            )

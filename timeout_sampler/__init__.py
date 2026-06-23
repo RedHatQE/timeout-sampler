@@ -11,6 +11,8 @@ LOGGER = get_logger(name=__name__)
 ExceptionFilter = Union[str, Callable[[Exception], bool]]
 ExceptionsDict = dict[type[Exception], list[ExceptionFilter]]
 
+__all__ = ["ExceptionFilter", "ExceptionsDict", "TimeoutExpiredError", "TimeoutSampler", "TimeoutWatch", "retry"]
+
 
 def _elapsed_time_log(elapsed_time: float) -> str:
     return f"Elapsed time: {elapsed_time} [{datetime.timedelta(seconds=elapsed_time)}]"
@@ -116,6 +118,16 @@ class TimeoutSampler:
     def _validate_exception_filters(self) -> None:
         for exception_class, filters in self.exceptions_dict.items():
             for filter_item in filters:
+                if isinstance(filter_item, str) and not filter_item:
+                    raise TypeError(
+                        f"exceptions_dict filter for {exception_class.__name__} contains an "
+                        f"empty string. Use a non-empty substring or a callable instead."
+                    )
+                if not isinstance(filter_item, str) and not callable(filter_item):
+                    raise TypeError(
+                        f"exceptions_dict filter for {exception_class.__name__} contains "
+                        f"{type(filter_item).__name__} ({filter_item!r}) — expected str or callable."
+                    )
                 if isinstance(filter_item, type):
                     raise TypeError(
                         f"exceptions_dict filter for {exception_class.__name__} contains a class "
@@ -200,13 +212,13 @@ class TimeoutSampler:
         raise TimeoutExpiredError(self._get_exception_log(exp=last_exp), last_exp=last_exp)
 
     @staticmethod
-    def _is_exception_matched(exp: Exception, exception_messages: list[ExceptionFilter]) -> bool:
+    def _is_exception_matched(exp: Exception, exception_filters: list[ExceptionFilter]) -> bool:
         """
         Verify whether exception should be ignored during retry.
 
         Args:
             exp (Exception): Exception object raised by `func`
-            exception_messages (list): Either an empty list allowing all exceptions,
+            exception_filters (list): Either an empty list allowing all exceptions,
                 a list of strings to match against str(exception),
                 or callables that receive the exception and return a truthy value to ignore.
                 Callable filters that raise are silently skipped (treated as non-matching).
@@ -214,16 +226,19 @@ class TimeoutSampler:
         Returns:
             bool: True if exception should be ignored (retry), False otherwise
         """
-        if not exception_messages:
+        if not exception_filters:
             return True
 
-        for msg in exception_messages:
+        for msg in exception_filters:
             if callable(msg):
                 try:
                     if msg(exp):
                         return True
                 except Exception as filter_error:  # noqa: BLE001
-                    LOGGER.warning(f"Callable filter raised {filter_error!r}, treating as non-matching")
+                    LOGGER.warning(
+                        f"Callable filter {msg!r} raised {filter_error!r} "
+                        f"for {type(exp).__name__}, treating as non-matching"
+                    )
                     continue
             elif msg in str(exp):
                 return True
@@ -242,8 +257,8 @@ class TimeoutSampler:
 
         for entry in self.exceptions_dict:
             if isinstance(exp, entry):  # Check inheritance for raised exception
-                exception_messages = self.exceptions_dict.get(entry, [])
-                if self._is_exception_matched(exp=exp, exception_messages=exception_messages):
+                exception_filters = self.exceptions_dict.get(entry, [])
+                if self._is_exception_matched(exp=exp, exception_filters=exception_filters):
                     return True
 
         return False
