@@ -1,0 +1,30 @@
+# timeout-sampler
+
+> Poll any function until it succeeds or times out, with fine-grained exception handling
+
+## Getting Started
+
+- [Getting Started with timeout-sampler](quickstart.md): Install timeout-sampler, write your first polling loop, and understand the core iteration pattern in under two minutes
+
+## User Guides
+
+- [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.md): Learn how to create a TimeoutSampler iterator, yield function results, and break on a success condition
+- [Retrying Functions with the @retry Decorator](using-the-retry-decorator.md): Wrap any function with the @retry decorator so it automatically polls until a truthy return value or timeout
+- [Filtering and Handling Exceptions](handling-exceptions.md): Configure exceptions_dict to selectively ignore, match by message text, or re-raise exceptions during polling
+- [Controlling Log Output](controlling-logging.md): Toggle elapsed-time logging, function-call details, and argument visibility using print_log, print_func_log, and print_func_args
+- [Tracking Elapsed Time with TimeoutWatch](tracking-elapsed-time.md): Use the TimeoutWatch helper to measure remaining time in custom polling or orchestration workflows
+
+## Recipes
+
+- [Common Polling Patterns](common-polling-patterns.md): Copy-paste recipes for waiting on API readiness, retrying flaky operations, polling with partial functions, and combining exception filters
+
+## Reference
+
+- [TimeoutSampler API](api-timeout-sampler.md): Complete constructor parameters, iteration behavior, exception handling methods, and return semantics for TimeoutSampler
+- [@retry Decorator API](api-retry-decorator.md): All parameters accepted by the retry decorator and how they map to TimeoutSampler options
+- [TimeoutWatch API](api-timeout-watch.md): Constructor and remaining_time() method reference for the TimeoutWatch time-tracking class
+- [TimeoutExpiredError Reference](api-exceptions.md): Attributes, string representation, and access to last_exp and elapsed_time on the TimeoutExpiredError exception
+
+## Internals
+
+- [How Exception Matching Works](exception-matching-logic.md): Understand the inheritance-aware exception matching algorithm, message filtering, and the three outcome categories when an exception is raised inside the polled function

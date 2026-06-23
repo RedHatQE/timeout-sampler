@@ -2,6 +2,8 @@
 
 Utility class for waiting to any function output and interact with it in given time.
 
+📖 **[Full Documentation](https://redhatqe.github.io/timeout-sampler/)**
+
 ## Installation
 
 ```bash
