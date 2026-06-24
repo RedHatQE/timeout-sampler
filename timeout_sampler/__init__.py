@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import datetime
 import time
-from typing import Any, Callable, Union
+from collections.abc import Callable
+from typing import Any, Union
 
 from simple_logger.logger import get_logger
 
