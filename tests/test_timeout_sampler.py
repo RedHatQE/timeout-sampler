@@ -249,8 +249,30 @@ class TestCallableExceptionFilter:
             ):
                 continue
 
-    def test_callable_filter_reraises_when_not_matched(self):
-        """Callable returning False should re-raise the exception immediately."""
+    def test_callable_filter_retries_until_success(self):
+        """Callable filter matches → retry → function eventually succeeds."""
+        call_count = 0
+
+        def flaky_func():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise StatusError(status=502)
+            return "success"
+
+        for sample in TimeoutSampler(
+            wait_timeout=5,
+            sleep=1,
+            func=flaky_func,
+            exceptions_dict={StatusError: [lambda exc: exc.status >= 500]},
+            print_log=False,
+        ):
+            if sample == "success":
+                break
+        assert call_count == 2
+
+    def test_callable_filter_raises_immediately_when_not_matched(self):
+        """Callable returning False should raise TimeoutExpiredError immediately."""
         with pytest.raises(TimeoutExpiredError) as exc_info:
             for _ in TimeoutSampler(
                 wait_timeout=1,

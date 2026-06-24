@@ -3,13 +3,13 @@ from __future__ import annotations
 import datetime
 import time
 from collections.abc import Callable
-from typing import Any, Union
+from typing import Any
 
 from simple_logger.logger import get_logger
 
 LOGGER = get_logger(name=__name__)
 
-ExceptionFilter = Union[str, Callable[[Exception], bool]]
+ExceptionFilter = str | Callable[[Exception], bool]
 ExceptionsDict = dict[type[Exception], list[ExceptionFilter]]
 
 __all__ = ["ExceptionFilter", "ExceptionsDict", "TimeoutExpiredError", "TimeoutSampler", "TimeoutWatch", "retry"]
@@ -87,7 +87,10 @@ class TimeoutSampler:
         wait_timeout (int): Time in seconds to wait for func to return a value equating to True
         sleep (int): Time in seconds between calls to func
         func (Callable): to be wrapped by TimeoutSampler
-        exceptions_dict (dict): Exception handling definition, only exception that specifically raised in exceptions_dict will be ignored
+        exceptions_dict (ExceptionsDict): Exception handling definition. Keys are exception classes to match
+            (using isinstance). Values are lists of filters — strings (matched against str(exception)) or
+            callables (invoked with the exception, returning True to ignore/retry). An empty list ignores
+            all instances of that exception. See the format example above.
         print_log (bool): Print elapsed time to log.
         print_func_log (bool): Add function call info to log
         print_func_args (bool): Include function arguments in log when print_func_log is True
@@ -247,13 +250,13 @@ class TimeoutSampler:
 
     def _should_ignore_exception(self, exp: Exception) -> bool:
         """
-        Verify whether exception should be raised during execution of `func`
+        Verify whether exception should be ignored during execution of `func`
 
         Args:
             exp (Exception): Exception object raised by `func`
 
         Returns:
-            bool: True if exp should be raised, False otherwise
+            bool: True if exp should be ignored (retry), False otherwise
         """
 
         for entry in self.exceptions_dict:
