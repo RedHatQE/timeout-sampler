@@ -264,7 +264,7 @@ class TestCallableExceptionFilter:
         assert exc_info.value.last_exp is not None
         assert exc_info.value.last_exp.status == 400
 
-    def test_callable_filter_skips_on_attribute_error(self):
+    def test_callable_filter_skips_on_attribute_error(self, caplog):
         """Callable that raises (e.g. missing attribute) is skipped, not propagated."""
         with pytest.raises(TimeoutExpiredError) as exc_info:
             for _ in TimeoutSampler(
@@ -277,6 +277,8 @@ class TestCallableExceptionFilter:
             ):
                 continue
         assert exc_info.value.last_exp is not None
+        assert "Callable filter" in caplog.text
+        assert "treating as non-matching" in caplog.text
         assert exc_info.value.last_exp.status == 502
 
     def test_class_passed_as_filter_raises_type_error(self):

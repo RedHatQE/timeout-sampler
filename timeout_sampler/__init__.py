@@ -112,27 +112,27 @@ class TimeoutSampler:
         self.print_log = print_log
         self.print_func_log = print_func_log
         self.print_func_args = print_func_args
-        self.exceptions_dict = exceptions_dict if exceptions_dict is not None else {Exception: []}
+        self.exceptions_dict = {k: list(v) for k, v in (exceptions_dict or {Exception: []}).items()}
         self._validate_exception_filters()
 
     def _validate_exception_filters(self) -> None:
         for exception_class, filters in self.exceptions_dict.items():
             for filter_item in filters:
-                if isinstance(filter_item, str) and not filter_item:
-                    raise TypeError(
-                        f"exceptions_dict filter for {exception_class.__name__} contains an "
-                        f"empty string. Use a non-empty substring or a callable instead."
-                    )
-                if not isinstance(filter_item, str) and not callable(filter_item):
-                    raise TypeError(
-                        f"exceptions_dict filter for {exception_class.__name__} contains "
-                        f"{type(filter_item).__name__} ({filter_item!r}) — expected str or callable."
-                    )
                 if isinstance(filter_item, type):
                     raise TypeError(
                         f"exceptions_dict filter for {exception_class.__name__} contains a class "
                         f"({filter_item.__name__}) instead of a callable or string. "
                         f"Use a lambda (e.g., lambda exc: exc.status >= 500) instead."
+                    )
+                elif isinstance(filter_item, str) and not filter_item:
+                    raise TypeError(
+                        f"exceptions_dict filter for {exception_class.__name__} contains an "
+                        f"empty string. Use a non-empty substring or a callable instead."
+                    )
+                elif not isinstance(filter_item, str) and not callable(filter_item):
+                    raise TypeError(
+                        f"exceptions_dict filter for {exception_class.__name__} contains "
+                        f"{type(filter_item).__name__} ({filter_item!r}) — expected str or callable."
                     )
 
     def _get_func_info(self, _func: Callable, type_: str) -> Any:
@@ -221,7 +221,7 @@ class TimeoutSampler:
             exception_filters (list): Either an empty list allowing all exceptions,
                 a list of strings to match against str(exception),
                 or callables that receive the exception and return a truthy value to ignore.
-                Callable filters that raise are silently skipped (treated as non-matching).
+                Callable filters that raise are logged as warnings and treated as non-matching.
 
         Returns:
             bool: True if exception should be ignored (retry), False otherwise
@@ -229,18 +229,18 @@ class TimeoutSampler:
         if not exception_filters:
             return True
 
-        for msg in exception_filters:
-            if callable(msg):
+        for filter_item in exception_filters:
+            if callable(filter_item):
                 try:
-                    if msg(exp):
+                    if filter_item(exp):
                         return True
                 except Exception as filter_error:  # noqa: BLE001
                     LOGGER.warning(
-                        f"Callable filter {msg!r} raised {filter_error!r} "
+                        f"Callable filter {filter_item!r} raised {filter_error!r} "
                         f"for {type(exp).__name__}, treating as non-matching"
                     )
                     continue
-            elif msg in str(exp):
+            elif filter_item in str(exp):
                 return True
         return False
 
