@@ -116,7 +116,7 @@ class TimeoutSampler:
         self.print_log = print_log
         self.print_func_log = print_func_log
         self.print_func_args = print_func_args
-        _exceptions_dict = exceptions_dict or {Exception: []}
+        _exceptions_dict = exceptions_dict if exceptions_dict is not None else {Exception: []}
         for key, value in _exceptions_dict.items():
             if not isinstance(value, list):
                 raise TypeError(f"exceptions_dict value for {key.__name__} must be a list, got {type(value).__name__}")
