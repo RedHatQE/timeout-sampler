@@ -116,10 +116,19 @@ class TimeoutSampler:
         self.print_log = print_log
         self.print_func_log = print_func_log
         self.print_func_args = print_func_args
-        self.exceptions_dict = {k: list(v) for k, v in (exceptions_dict or {Exception: []}).items()}
+        _exceptions_dict = exceptions_dict or {Exception: []}
+        for key, value in _exceptions_dict.items():
+            if not isinstance(value, list):
+                raise TypeError(f"exceptions_dict value for {key.__name__} must be a list, got {type(value).__name__}")
+        self.exceptions_dict = {k: list(v) for k, v in _exceptions_dict.items()}
         self._validate_exception_filters()
 
     def _validate_exception_filters(self) -> None:
+        """Validate that all filter items in exceptions_dict are strings or callables.
+
+        Raises:
+            TypeError: If a filter is a class, empty string, or non-str/non-callable type.
+        """
         for exception_class, filters in self.exceptions_dict.items():
             for filter_item in filters:
                 if isinstance(filter_item, type):
@@ -259,11 +268,9 @@ class TimeoutSampler:
             bool: True if exp should be ignored (retry), False otherwise
         """
 
-        for entry in self.exceptions_dict:
-            if isinstance(exp, entry):  # Check inheritance for raised exception
-                exception_filters = self.exceptions_dict.get(entry, [])
-                if self._is_exception_matched(exp=exp, exception_filters=exception_filters):
-                    return True
+        for entry, exception_filters in self.exceptions_dict.items():
+            if isinstance(exp, entry) and self._is_exception_matched(exp=exp, exception_filters=exception_filters):
+                return True
 
         return False
 

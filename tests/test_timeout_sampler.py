@@ -261,7 +261,7 @@ class TestCallableExceptionFilter:
             return "success"
 
         for sample in TimeoutSampler(
-            wait_timeout=5,
+            wait_timeout=2,
             sleep=1,
             func=flaky_func,
             exceptions_dict={StatusError: [lambda exc: exc.status >= 500]},

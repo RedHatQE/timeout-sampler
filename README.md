@@ -77,6 +77,8 @@ for sample in TimeoutSampler(
 
 # Use callable filters to retry based on exception attributes.
 # Callables receive the exception and should return a truthy value to ignore (retry).
+# Example: HttpError is a custom exception with a `status` attribute,
+# and make_request() is a function that may raise it.
 # Only retry on HTTP 5xx errors; 4xx errors raise immediately.
 for sample in TimeoutSampler(
     wait_timeout=60,
