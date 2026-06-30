@@ -118,6 +118,8 @@ class TimeoutSampler:
         self.print_func_args = print_func_args
         _exceptions_dict = exceptions_dict if exceptions_dict is not None else {Exception: []}
         for key, value in _exceptions_dict.items():
+            if not isinstance(key, type) or not issubclass(key, BaseException):
+                raise TypeError(f"exceptions_dict key {key!r} must be an Exception subclass, got {type(key).__name__}")
             if not isinstance(value, list):
                 raise TypeError(f"exceptions_dict value for {key.__name__} must be a list, got {type(value).__name__}")
         self.exceptions_dict = {k: list(v) for k, v in _exceptions_dict.items()}
@@ -253,7 +255,7 @@ class TimeoutSampler:
                         f"for {type(exp).__name__}, treating as non-matching"
                     )
                     continue
-            elif filter_item in str(exp):
+            elif isinstance(filter_item, str) and filter_item in str(exp):
                 return True
         return False
 

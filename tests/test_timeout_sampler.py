@@ -335,3 +335,22 @@ class TestCallableExceptionFilter:
                 print_log=False,
                 status=502,
             )
+
+    @pytest.mark.parametrize(
+        "invalid_key",
+        [
+            pytest.param(int, id="test_non_exception_class_rejected"),
+            pytest.param("ValueError", id="test_string_key_rejected"),
+            pytest.param(42, id="test_int_key_rejected"),
+        ],
+    )
+    def test_invalid_exceptions_dict_key_raises_type_error(self, invalid_key):
+        """exceptions_dict keys must be Exception subclasses."""
+        with pytest.raises(TypeError, match="must be an Exception subclass"):
+            TimeoutSampler(
+                wait_timeout=1,
+                sleep=1,
+                func=lambda: None,
+                exceptions_dict={invalid_key: []},
+                print_log=False,
+            )
