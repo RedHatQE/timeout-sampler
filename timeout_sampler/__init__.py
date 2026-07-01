@@ -168,7 +168,8 @@ class TimeoutSampler:
             # If func is lambda function.
             if _func.__name__ == "<lambda>":
                 if type_ == "__module__":
-                    return f"{res}.{_func.__qualname__.split('.')[1]}"
+                    qualname_parts = _func.__qualname__.split(".")
+                    return f"{res}.{qualname_parts[1]}" if len(qualname_parts) > 1 else res
 
                 elif type_ == "__name__":
                     free_vars = _func.__code__.co_freevars

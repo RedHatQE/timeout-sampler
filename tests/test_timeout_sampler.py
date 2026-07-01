@@ -153,6 +153,16 @@ def test_sampler():
     pytest.fail("Sampler rise timeout")
 
 
+def test_sampler_lambda_with_logging():
+    """Top-level lambda with print_log=True should not crash on qualname parsing."""
+    sampler = TimeoutSampler(wait_timeout=1, sleep=1, print_log=True, func=lambda: True)
+    for sample in sampler:
+        if sample:
+            return
+
+    pytest.fail("Sampler rise timeout")
+
+
 def test_sampler_negative():
     sampler = TimeoutSampler(
         wait_timeout=10,
