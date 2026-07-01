@@ -9,7 +9,9 @@ from simple_logger.logger import get_logger
 
 LOGGER = get_logger(name=__name__)
 
+# A filter for matching exceptions: a substring to match against str(exception) or a callable returning True to ignore.
 ExceptionFilter = str | Callable[[Exception], bool]
+# Mapping of exception classes to their filters. An empty list ignores all instances of that exception.
 ExceptionsDict = dict[type[Exception], list[ExceptionFilter]]
 
 __all__ = ["ExceptionFilter", "ExceptionsDict", "TimeoutExpiredError", "TimeoutSampler", "TimeoutWatch", "retry"]
@@ -140,7 +142,7 @@ class TimeoutSampler:
             if not isinstance(value, list):
                 raise TypeError(f"exceptions_dict value for {key.__name__} must be a list, got {type(value).__name__}")
             for filter_item in value:
-                if isinstance(filter_item, type):
+                if isinstance(filter_item, type):  # Must precede callable() check — classes are callable
                     raise TypeError(
                         f"exceptions_dict filter for {key.__name__} contains a class "
                         f"({filter_item.__name__}) instead of a callable or string. "

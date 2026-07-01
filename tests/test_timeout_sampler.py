@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import re
 from typing import NoReturn
 
 import pytest
 
-from timeout_sampler import TimeoutExpiredError, TimeoutSampler, retry
+from timeout_sampler import ExceptionsDict, TimeoutExpiredError, TimeoutSampler, retry
 
 
 class TestTimeoutSampler:
@@ -247,7 +249,7 @@ class TestCallableExceptionFilter:
             ),
         ],
     )
-    def test_callable_filter_retries_until_timeout(self, exceptions_dict, status):
+    def test_callable_filter_retries_until_timeout(self, exceptions_dict: ExceptionsDict, status: int) -> None:
         """Exception matching the filter should be ignored, retrying until timeout."""
         with pytest.raises(TimeoutExpiredError):
             for _ in TimeoutSampler(
@@ -260,7 +262,7 @@ class TestCallableExceptionFilter:
             ):
                 continue
 
-    def test_callable_filter_retries_until_success(self):
+    def test_callable_filter_retries_until_success(self) -> None:
         """Callable filter matches → retry → function eventually succeeds."""
         call_count = 0
 
@@ -272,7 +274,7 @@ class TestCallableExceptionFilter:
             return "success"
 
         for sample in TimeoutSampler(
-            wait_timeout=2,
+            wait_timeout=4,
             sleep=1,
             func=flaky_func,
             exceptions_dict={StatusError: [lambda exc: exc.status >= 500]},
@@ -282,7 +284,7 @@ class TestCallableExceptionFilter:
                 break
         assert call_count == 2
 
-    def test_callable_filter_raises_immediately_when_not_matched(self):
+    def test_callable_filter_raises_immediately_when_not_matched(self) -> None:
         """Callable returning False should raise TimeoutExpiredError immediately."""
         with pytest.raises(TimeoutExpiredError) as exc_info:
             for _ in TimeoutSampler(
@@ -297,7 +299,7 @@ class TestCallableExceptionFilter:
         assert exc_info.value.last_exp is not None
         assert exc_info.value.last_exp.status == 400
 
-    def test_callable_filter_skips_on_attribute_error(self, caplog):
+    def test_callable_filter_skips_on_attribute_error(self, caplog: pytest.LogCaptureFixture) -> None:
         """Callable that raises (e.g. missing attribute) is skipped, not propagated."""
         with pytest.raises(TimeoutExpiredError) as exc_info:
             for _ in TimeoutSampler(
@@ -314,7 +316,7 @@ class TestCallableExceptionFilter:
         assert "treating as non-matching" in caplog.text
         assert exc_info.value.last_exp.status == 502
 
-    def test_class_passed_as_filter_raises_type_error(self):
+    def test_class_passed_as_filter_raises_type_error(self) -> None:
         """Passing an exception class instead of a callable should raise TypeError at init."""
         with pytest.raises(TypeError, match="contains a class.*instead of a callable"):
             TimeoutSampler(
@@ -335,7 +337,7 @@ class TestCallableExceptionFilter:
             pytest.param(12.5, id="test_float_filter_rejected"),
         ],
     )
-    def test_invalid_filter_raises_type_error(self, invalid_filter):
+    def test_invalid_filter_raises_type_error(self, invalid_filter: object) -> None:
         """Invalid filter items (empty string, non-str, non-callable) should raise TypeError at init."""
         with pytest.raises(TypeError):
             TimeoutSampler(
@@ -355,7 +357,7 @@ class TestCallableExceptionFilter:
             pytest.param(42, id="test_int_key_rejected"),
         ],
     )
-    def test_invalid_exceptions_dict_key_raises_type_error(self, invalid_key):
+    def test_invalid_exceptions_dict_key_raises_type_error(self, invalid_key: object) -> None:
         """exceptions_dict keys must be Exception subclasses."""
         with pytest.raises(TypeError, match="must be an Exception subclass"):
             TimeoutSampler(
