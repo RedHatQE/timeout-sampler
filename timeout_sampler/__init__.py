@@ -116,39 +116,47 @@ class TimeoutSampler:
         self.print_log = print_log
         self.print_func_log = print_func_log
         self.print_func_args = print_func_args
-        _exceptions_dict = exceptions_dict if exceptions_dict is not None else {Exception: []}
-        for key, value in _exceptions_dict.items():
+        self.exceptions_dict = self._validate_exceptions_dict(
+            exceptions_dict=exceptions_dict if exceptions_dict is not None else {Exception: []}
+        )
+
+    @staticmethod
+    def _validate_exceptions_dict(exceptions_dict: ExceptionsDict) -> ExceptionsDict:
+        """Validate and return a defensive copy of exceptions_dict.
+
+        Args:
+            exceptions_dict (ExceptionsDict): Exception handling definition to validate.
+
+        Returns:
+            ExceptionsDict: A validated defensive copy of the input.
+
+        Raises:
+            TypeError: If keys aren't Exception subclasses, values aren't lists,
+                or filter items aren't strings/callables.
+        """
+        for key, value in exceptions_dict.items():
             if not isinstance(key, type) or not issubclass(key, Exception):
                 raise TypeError(f"exceptions_dict key {key!r} must be an Exception subclass, got {type(key).__name__}")
             if not isinstance(value, list):
                 raise TypeError(f"exceptions_dict value for {key.__name__} must be a list, got {type(value).__name__}")
-        self.exceptions_dict = {k: list(v) for k, v in _exceptions_dict.items()}
-        self._validate_exception_filters()
-
-    def _validate_exception_filters(self) -> None:
-        """Validate that all filter items in exceptions_dict are strings or callables.
-
-        Raises:
-            TypeError: If a filter is a class, empty string, or non-str/non-callable type.
-        """
-        for exception_class, filters in self.exceptions_dict.items():
-            for filter_item in filters:
+            for filter_item in value:
                 if isinstance(filter_item, type):
                     raise TypeError(
-                        f"exceptions_dict filter for {exception_class.__name__} contains a class "
+                        f"exceptions_dict filter for {key.__name__} contains a class "
                         f"({filter_item.__name__}) instead of a callable or string. "
                         f"Use a lambda (e.g., lambda exc: exc.status >= 500) instead."
                     )
                 elif isinstance(filter_item, str) and not filter_item:
                     raise TypeError(
-                        f"exceptions_dict filter for {exception_class.__name__} contains an "
+                        f"exceptions_dict filter for {key.__name__} contains an "
                         f"empty string. Use a non-empty substring or a callable instead."
                     )
                 elif not isinstance(filter_item, str) and not callable(filter_item):
                     raise TypeError(
-                        f"exceptions_dict filter for {exception_class.__name__} contains "
+                        f"exceptions_dict filter for {key.__name__} contains "
                         f"{type(filter_item).__name__} ({filter_item!r}) — expected str or callable."
                     )
+        return {k: list(v) for k, v in exceptions_dict.items()}
 
     def _get_func_info(self, _func: Callable, type_: str) -> Any:
         # If func is partial function.

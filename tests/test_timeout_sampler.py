@@ -1,4 +1,5 @@
 import re
+from typing import NoReturn
 
 import pytest
 
@@ -208,7 +209,7 @@ class StatusError(Exception):
 
 class TestCallableExceptionFilter:
     @staticmethod
-    def _raise_status_error(status: int):
+    def _raise_status_error(status: int) -> NoReturn:
         raise StatusError(status=status)
 
     @pytest.mark.parametrize(
