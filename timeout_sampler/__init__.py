@@ -97,10 +97,12 @@ class TimeoutSampler:
         print_log (bool): Print elapsed time to log.
         print_func_log (bool): Add function call info to log
         print_func_args (bool): Include function arguments in log when print_func_log is True
-        sensitive_keys (frozenset[str]): Additional keys to redact from logged kwargs (case-insensitive exact match).
+        sensitive_keys (frozenset[str] | set[str] | None): Additional keys to redact from logged kwargs (case-insensitive exact match).
             Merged with the default sensitive keys (authorization, token, access_token, password, secret, api_key, apikey).
             Note: "token" matches any key named exactly "token" (any case) — keys like "nextPageToken" are not affected.
     """
+
+    _MAX_REDACT_DEPTH: int = 20
 
     _DEFAULT_SENSITIVE_KEYS: frozenset[str] = frozenset({
         "authorization",
@@ -133,11 +135,13 @@ class TimeoutSampler:
         self.print_log = print_log
         self.print_func_log = print_func_log
         self.print_func_args = print_func_args
-        self.sensitive_keys = (
-            (self._DEFAULT_SENSITIVE_KEYS | frozenset(key.lower() for key in sensitive_keys))
-            if sensitive_keys is not None
-            else self._DEFAULT_SENSITIVE_KEYS
-        )
+        if sensitive_keys is not None:
+            for key in sensitive_keys:
+                if not isinstance(key, str):
+                    raise TypeError(f"sensitive_keys must contain only strings, got {type(key).__name__}: {key!r}")
+            self.sensitive_keys = self._DEFAULT_SENSITIVE_KEYS | frozenset(key.lower() for key in sensitive_keys)
+        else:
+            self.sensitive_keys = self._DEFAULT_SENSITIVE_KEYS
         self.exceptions_dict = self._validate_exceptions_dict(
             exceptions_dict=exceptions_dict if exceptions_dict is not None else {Exception: []}
         )
@@ -212,12 +216,12 @@ class TimeoutSampler:
             data: The data structure to redact. Supports dict, list, tuple, and
                 scalar values.
             _depth: Current recursion depth (internal use). Data nested beyond
-                20 levels is replaced with a truncation sentinel.
+                ``_MAX_REDACT_DEPTH`` levels is replaced with a truncation sentinel.
 
         Returns:
             A redacted copy of *data* with the same structure.
         """
-        if _depth > 20:
+        if _depth > self._MAX_REDACT_DEPTH:
             return "<redacted: max depth exceeded>"
         try:
             if isinstance(data, dict):
@@ -407,7 +411,7 @@ def retry(
         print_log (bool): Print elapsed time to log
         print_func_log (bool): Add function call info to log
         print_func_args (bool): Include function arguments in log
-        sensitive_keys (frozenset[str]): Additional keys to redact from logged kwargs (case-insensitive exact match).
+        sensitive_keys (frozenset[str] | set[str] | None): Additional keys to redact from logged kwargs (case-insensitive exact match).
             Merged with the default sensitive keys.
 
     Returns:
@@ -427,7 +431,7 @@ def retry(
 
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: dict[str, Any]) -> Any:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             for sample in TimeoutSampler(
                 func=func,
                 wait_timeout=wait_timeout,

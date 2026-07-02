@@ -530,3 +530,22 @@ class TestSensitiveKeyRedaction:
         )
         log_output = sampler._func_log
         assert "<redacted: max depth exceeded>" in log_output
+
+    @pytest.mark.parametrize(
+        "invalid_keys",
+        [
+            pytest.param(frozenset({123, "valid"}), id="test_int_in_sensitive_keys"),
+            pytest.param({None, "valid"}, id="test_none_in_sensitive_keys"),
+            pytest.param(frozenset({True}), id="test_bool_in_sensitive_keys"),
+        ],
+    )
+    def test_non_string_sensitive_key_raises_type_error(self, invalid_keys):
+        """Passing non-string elements in sensitive_keys should raise TypeError."""
+        with pytest.raises(TypeError, match="sensitive_keys must contain only strings"):
+            TimeoutSampler(
+                wait_timeout=1,
+                sleep=1,
+                func=lambda: True,
+                print_log=False,
+                sensitive_keys=invalid_keys,
+            )
