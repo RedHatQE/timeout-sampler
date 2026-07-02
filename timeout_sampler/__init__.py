@@ -9,6 +9,13 @@ from simple_logger.logger import get_logger
 
 LOGGER = get_logger(name=__name__)
 
+# A filter for matching exceptions: a substring to match against str(exception) or a callable returning True to ignore.
+ExceptionFilter = str | Callable[[Exception], bool]
+# Mapping of exception classes to their filters. An empty list ignores all instances of that exception.
+ExceptionsDict = dict[type[Exception], list[ExceptionFilter]]
+
+__all__ = ["ExceptionFilter", "ExceptionsDict", "TimeoutExpiredError", "TimeoutSampler", "TimeoutWatch", "retry"]
+
 
 def _elapsed_time_log(elapsed_time: float) -> str:
     return f"Elapsed time: {elapsed_time} [{datetime.timedelta(seconds=elapsed_time)}]"
@@ -48,8 +55,12 @@ class TimeoutSampler:
                 exception1_msg0,
                 exception1_msg1
             ],
-            exception2: []
+            exception2: [],
+            exception3: [lambda exc: exc.status >= 500]
         }
+
+        Values can be strings (matched against str(exception)) or callables
+        (invoked with the exception, returning True to ignore/retry).
 
         If an exception is raised within `func`:
             Example exception inheritance:
@@ -78,7 +89,10 @@ class TimeoutSampler:
         wait_timeout (int): Time in seconds to wait for func to return a value equating to True
         sleep (int): Time in seconds between calls to func
         func (Callable): to be wrapped by TimeoutSampler
-        exceptions_dict (dict): Exception handling definition, only exception that specifically raised in exceptions_dict will be ignored
+        exceptions_dict (ExceptionsDict): Exception handling definition. Keys are exception classes to match
+            (using isinstance). Values are lists of filters — strings (matched against str(exception)) or
+            callables (invoked with the exception, returning True to ignore/retry). An empty list ignores
+            all instances of that exception. See the format example above.
         print_log (bool): Print elapsed time to log.
         print_func_log (bool): Add function call info to log
         print_func_args (bool): Include function arguments in log when print_func_log is True
@@ -89,7 +103,7 @@ class TimeoutSampler:
         wait_timeout: float,
         sleep: int,
         func: Callable,
-        exceptions_dict: dict[type[Exception], list[str]] | None = None,
+        exceptions_dict: ExceptionsDict | None = None,
         print_log: bool = True,
         print_func_log: bool = True,
         print_func_args: bool = True,
@@ -104,7 +118,49 @@ class TimeoutSampler:
         self.print_log = print_log
         self.print_func_log = print_func_log
         self.print_func_args = print_func_args
-        self.exceptions_dict = exceptions_dict if exceptions_dict is not None else {Exception: []}
+        self.exceptions_dict = self._validate_exceptions_dict(
+            exceptions_dict=exceptions_dict if exceptions_dict is not None else {Exception: []}
+        )
+
+    @staticmethod
+    def _validate_exceptions_dict(exceptions_dict: ExceptionsDict) -> ExceptionsDict:
+        """Validate and return a defensive copy of exceptions_dict.
+
+        Args:
+            exceptions_dict (ExceptionsDict): Exception handling definition to validate.
+
+        Returns:
+            ExceptionsDict: A validated defensive copy of the input.
+
+        Raises:
+            TypeError: If keys aren't Exception subclasses, values aren't lists,
+                or filter items aren't strings/callables.
+        """
+        if not isinstance(exceptions_dict, dict):
+            raise TypeError(f"exceptions_dict must be a dict, got {type(exceptions_dict).__name__}")
+        for key, value in exceptions_dict.items():
+            if not isinstance(key, type) or not issubclass(key, Exception):
+                raise TypeError(f"exceptions_dict key {key!r} must be an Exception subclass, got {type(key).__name__}")
+            if not isinstance(value, list):
+                raise TypeError(f"exceptions_dict value for {key.__name__} must be a list, got {type(value).__name__}")
+            for filter_item in value:
+                if isinstance(filter_item, type):  # Must precede callable() check — classes are callable
+                    raise TypeError(
+                        f"exceptions_dict filter for {key.__name__} contains a class "
+                        f"({filter_item.__name__}) instead of a callable or string. "
+                        f"Use a lambda (e.g., lambda exc: exc.status >= 500) instead."
+                    )
+                elif isinstance(filter_item, str) and not filter_item:
+                    raise TypeError(
+                        f"exceptions_dict filter for {key.__name__} contains an "
+                        f"empty string. Use a non-empty substring or a callable instead."
+                    )
+                elif not isinstance(filter_item, str) and not callable(filter_item):
+                    raise TypeError(
+                        f"exceptions_dict filter for {key.__name__} contains "
+                        f"{type(filter_item).__name__} ({filter_item!r}) — expected str or callable."
+                    )
+        return {k: list(v) for k, v in exceptions_dict.items()}
 
     def _get_func_info(self, _func: Callable, type_: str) -> Any:
         # If func is partial function.
@@ -116,7 +172,8 @@ class TimeoutSampler:
             # If func is lambda function.
             if _func.__name__ == "<lambda>":
                 if type_ == "__module__":
-                    return f"{res}.{_func.__qualname__.split('.')[1]}"
+                    qualname_parts = _func.__qualname__.split(".")
+                    return f"{res}.{qualname_parts[1]}" if len(qualname_parts) > 1 else res
 
                 elif type_ == "__name__":
                     free_vars = _func.__code__.co_freevars
@@ -183,40 +240,57 @@ class TimeoutSampler:
         raise TimeoutExpiredError(self._get_exception_log(exp=last_exp), last_exp=last_exp)
 
     @staticmethod
-    def _is_exception_matched(exp: Exception, exception_messages: list[str]) -> bool:
+    def _is_exception_matched(exp: Exception, exception_filters: list[ExceptionFilter]) -> bool:
         """
-        Verify whether exception text is allowed and should be raised
+        Verify whether exception should be ignored during retry.
 
         Args:
             exp (Exception): Exception object raised by `func`
-            exception_messages (list): Either an empty list allowing all text,
-                or a list of allowed strings to match against the exception text.
+            exception_filters (list): Either an empty list allowing all exceptions,
+                a list of strings to match against str(exception),
+                or callables that receive the exception and return a truthy value to ignore.
+                Callables must accept exactly one positional argument (the exception instance).
+                Zero-arg or multi-arg callables will raise at runtime and be treated as non-matching.
 
         Returns:
-            bool: True if exception text is allowed or no exception text given, False otherwise
+            bool: True if exception should be ignored (retry), False otherwise
         """
-        if not exception_messages:
+        if not exception_filters:
             return True
 
-        # Prevent match if provided with empty string
-        return any(msg and msg in str(exp) for msg in exception_messages)
+        exp_str: str | None = None
+        for filter_item in exception_filters:
+            if callable(filter_item):
+                try:
+                    if filter_item(exp):
+                        return True
+                except Exception as filter_error:  # noqa: BLE001
+                    LOGGER.warning(
+                        f"Callable filter {filter_item!r} raised {filter_error!r} "
+                        f"for {type(exp).__name__}, treating as non-matching"
+                    )
+                    continue
+            elif isinstance(filter_item, str):
+                if exp_str is None:
+                    exp_str = str(exp)
+                if filter_item in exp_str:
+                    return True
+        return False
 
     def _should_ignore_exception(self, exp: Exception) -> bool:
         """
-        Verify whether exception should be raised during execution of `func`
+        Verify whether exception should be ignored during execution of `func`
 
         Args:
             exp (Exception): Exception object raised by `func`
 
         Returns:
-            bool: True if exp should be raised, False otherwise
+            bool: True if exp should be ignored (retry), False otherwise
         """
 
-        for entry in self.exceptions_dict:
-            if isinstance(exp, entry):  # Check inheritance for raised exception
-                exception_messages = self.exceptions_dict.get(entry, [])
-                if self._is_exception_matched(exp=exp, exception_messages=exception_messages):
-                    return True
+        for entry, exception_filters in self.exceptions_dict.items():
+            if isinstance(exp, entry) and self._is_exception_matched(exp=exp, exception_filters=exception_filters):
+                return True
 
         return False
 
@@ -260,7 +334,7 @@ class TimeoutWatch:
 def retry(
     wait_timeout: int,
     sleep: int,
-    exceptions_dict: dict[type[Exception], list[str]] | None = None,
+    exceptions_dict: ExceptionsDict | None = None,
     print_log: bool = True,
     print_func_log: bool = True,
     print_func_args: bool = True,

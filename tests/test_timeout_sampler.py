@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import re
+from typing import NoReturn
 
 import pytest
 
-from timeout_sampler import TimeoutExpiredError, TimeoutSampler, retry
+from timeout_sampler import ExceptionsDict, TimeoutExpiredError, TimeoutSampler, retry
 
 
 class TestTimeoutSampler:
@@ -152,6 +155,16 @@ def test_sampler():
     pytest.fail("Sampler rise timeout")
 
 
+def test_sampler_lambda_with_logging():
+    """Top-level lambda with print_log=True should not crash on qualname parsing."""
+    sampler = TimeoutSampler(wait_timeout=1, sleep=1, print_log=True, func=lambda: True)
+    for sample in sampler:
+        if sample:
+            return
+
+    pytest.fail("Sampler rise timeout")
+
+
 def test_sampler_negative():
     sampler = TimeoutSampler(
         wait_timeout=10,
@@ -193,3 +206,182 @@ def test_decorator():
 def test_decorator_negative():
     with pytest.raises(TimeoutExpiredError):
         never_succeeds()
+
+
+# callable filter tests
+
+
+class StatusError(Exception):
+    """Exception with a status attribute for testing callable filters."""
+
+    def __init__(self, status: int):
+        self.status = status
+        super().__init__(f"{status}")
+
+
+class TestCallableExceptionFilter:
+    @staticmethod
+    def _raise_status_error(status: int) -> NoReturn:
+        raise StatusError(status=status)
+
+    @pytest.mark.parametrize(
+        "exceptions_dict, status",
+        [
+            pytest.param(
+                {StatusError: [lambda exc: exc.status >= 500]},
+                502,
+                id="test_callable_filter_ignores_matching_5xx",
+            ),
+            pytest.param(
+                {StatusError: ["999", lambda exc: exc.status >= 500]},
+                503,
+                id="test_callable_and_string_filters_combined",
+            ),
+            pytest.param(
+                {StatusError: ["502"]},
+                502,
+                id="test_string_filter_still_works",
+            ),
+            pytest.param(
+                {StatusError: []},
+                400,
+                id="test_empty_list_still_matches_all",
+            ),
+        ],
+    )
+    def test_callable_filter_retries_until_timeout(self, exceptions_dict: ExceptionsDict, status: int) -> None:
+        """Exception matching the filter should be ignored, retrying until timeout."""
+        with pytest.raises(TimeoutExpiredError):
+            for _ in TimeoutSampler(
+                wait_timeout=1,
+                sleep=1,
+                func=self._raise_status_error,
+                exceptions_dict=exceptions_dict,
+                print_log=False,
+                status=status,
+            ):
+                continue
+
+    def test_callable_filter_retries_until_success(self) -> None:
+        """Callable filter matches → retry → function eventually succeeds."""
+        call_count = 0
+
+        def flaky_func() -> str:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise StatusError(status=502)
+            return "success"
+
+        for sample in TimeoutSampler(
+            wait_timeout=4,
+            sleep=1,
+            func=flaky_func,
+            exceptions_dict={StatusError: [lambda exc: exc.status >= 500]},
+            print_log=False,
+        ):
+            if sample == "success":
+                break
+        assert call_count == 2
+
+    def test_callable_filter_raises_immediately_when_not_matched(self) -> None:
+        """Callable returning False should raise TimeoutExpiredError immediately."""
+        with pytest.raises(TimeoutExpiredError) as exc_info:
+            for _ in TimeoutSampler(
+                wait_timeout=1,
+                sleep=1,
+                func=self._raise_status_error,
+                exceptions_dict={StatusError: [lambda exc: exc.status >= 500]},
+                print_log=False,
+                status=400,
+            ):
+                continue
+        assert exc_info.value.last_exp is not None
+        assert exc_info.value.last_exp.status == 400
+
+    def test_callable_filter_skips_on_attribute_error(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Callable that raises (e.g. missing attribute) is skipped, not propagated."""
+        with pytest.raises(TimeoutExpiredError) as exc_info:
+            for _ in TimeoutSampler(
+                wait_timeout=1,
+                sleep=1,
+                func=self._raise_status_error,
+                exceptions_dict={StatusError: [lambda exc: exc.no_such_attr >= 500]},
+                print_log=False,
+                status=502,
+            ):
+                continue
+        assert exc_info.value.last_exp is not None
+        assert "Callable filter" in caplog.text
+        assert "treating as non-matching" in caplog.text
+        assert exc_info.value.last_exp.status == 502
+
+    def test_class_passed_as_filter_raises_type_error(self) -> None:
+        """Passing an exception class instead of a callable should raise TypeError at init."""
+        with pytest.raises(TypeError, match="contains a class.*instead of a callable"):
+            TimeoutSampler(
+                wait_timeout=1,
+                sleep=1,
+                func=self._raise_status_error,
+                exceptions_dict={StatusError: [ValueError]},
+                print_log=False,
+                status=502,
+            )
+
+    @pytest.mark.parametrize(
+        "invalid_filter",
+        [
+            pytest.param("", id="test_empty_string_filter_rejected"),
+            pytest.param(123, id="test_int_filter_rejected"),
+            pytest.param(None, id="test_none_filter_rejected"),
+            pytest.param(12.5, id="test_float_filter_rejected"),
+        ],
+    )
+    def test_invalid_filter_raises_type_error(self, invalid_filter: object) -> None:
+        """Invalid filter items (empty string, non-str, non-callable) should raise TypeError at init."""
+        with pytest.raises(TypeError):
+            TimeoutSampler(
+                wait_timeout=1,
+                sleep=1,
+                func=self._raise_status_error,
+                exceptions_dict={StatusError: [invalid_filter]},
+                print_log=False,
+                status=502,
+            )
+
+    @pytest.mark.parametrize(
+        "invalid_key",
+        [
+            pytest.param(int, id="test_non_exception_class_rejected"),
+            pytest.param("ValueError", id="test_string_key_rejected"),
+            pytest.param(42, id="test_int_key_rejected"),
+        ],
+    )
+    def test_invalid_exceptions_dict_key_raises_type_error(self, invalid_key: object) -> None:
+        """exceptions_dict keys must be Exception subclasses."""
+        with pytest.raises(TypeError, match="must be an Exception subclass"):
+            TimeoutSampler(
+                wait_timeout=1,
+                sleep=1,
+                func=lambda: None,
+                exceptions_dict={invalid_key: []},
+                print_log=False,
+            )
+
+    @pytest.mark.parametrize(
+        "invalid_dict",
+        [
+            pytest.param([], id="test_list_rejected"),
+            pytest.param("not a dict", id="test_string_rejected"),
+        ],
+    )
+    def test_non_dict_exceptions_dict_raises_type_error(self, invalid_dict: object) -> None:
+        """exceptions_dict must be a dict."""
+        with pytest.raises(TypeError, match="exceptions_dict must be a dict"):
+            TimeoutSampler(
+                wait_timeout=1,
+                sleep=1,
+                func=lambda: None,
+                exceptions_dict=invalid_dict,
+                print_log=False,
+            )

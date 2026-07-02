@@ -75,6 +75,31 @@ for sample in TimeoutSampler(
         return
 
 
+# Use callable filters to retry based on exception attributes.
+# Callables receive the exception and should return a truthy value to ignore (retry).
+# Example: HttpError is a custom exception with a `status` attribute,
+# and make_request() is a function that may raise it.
+# Only retry on HTTP 5xx errors; 4xx errors raise immediately.
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    exceptions_dict={HttpError: [lambda exc: exc.status >= 500]},
+):
+    if sample:
+        break
+
+# Callable and string filters can be combined in the same list.
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    exceptions_dict={HttpError: ["connection refused", lambda exc: exc.status >= 500]},
+):
+    if sample:
+        break
+
+
 # Use as decorator. (Any argument that TimeoutSampler accepts will be passed to the decorated function)
 from timeout_sampler import retry
 
