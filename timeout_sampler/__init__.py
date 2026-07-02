@@ -121,7 +121,7 @@ class TimeoutSampler:
         print_log: bool = True,
         print_func_log: bool = True,
         print_func_args: bool = True,
-        sensitive_keys: frozenset[str] | None = None,
+        sensitive_keys: frozenset[str] | set[str] | None = None,
         func_args: tuple[Any] | None = None,
         **func_kwargs: Any,
     ):
@@ -201,18 +201,22 @@ class TimeoutSampler:
                     return f"lambda: {free_vars_str}{'.'.join(_func.__code__.co_names)}"
             return res
 
-    def _redact(self, data: Any) -> Any:
+    def _redact(self, data: Any, _depth: int = 0) -> Any:
         """Recursively redact values whose keys exactly match sensitive keys (case-insensitive)."""
+        if _depth > 20:
+            return "<redacted: max depth exceeded>"
         try:
             if isinstance(data, dict):
                 return {
-                    key: "***" if isinstance(key, str) and key.lower() in self.sensitive_keys else self._redact(value)
+                    key: "***"
+                    if isinstance(key, str) and key.lower() in self.sensitive_keys
+                    else self._redact(value, _depth=_depth + 1)
                     for key, value in data.items()
                 }
             if isinstance(data, list):
-                return [self._redact(item) for item in data]
+                return [self._redact(item, _depth=_depth + 1) for item in data]
             if isinstance(data, tuple):
-                return tuple(self._redact(item) for item in data)
+                return tuple(self._redact(item, _depth=_depth + 1) for item in data)
         except RecursionError:
             LOGGER.warning(f"Redaction failed due to circular reference in data; data type: {type(data).__name__}")
             return "<redaction failed: circular reference>"
@@ -377,7 +381,7 @@ def retry(
     print_log: bool = True,
     print_func_log: bool = True,
     print_func_args: bool = True,
-    sensitive_keys: frozenset[str] | None = None,
+    sensitive_keys: frozenset[str] | set[str] | None = None,
 ) -> Callable:
     """
     Decorator for TimeoutSampler, For usage see TimeoutSampler.
@@ -392,6 +396,13 @@ def retry(
         sensitive_keys (frozenset[str]): Additional keys to redact from logged kwargs (case-insensitive exact match).
             Merged with the default sensitive keys.
 
+    Returns:
+        Callable: The decorated function that will be retried on failure.
+
+    Raises:
+        TimeoutExpiredError: When the decorated function fails to return a truthy value
+            within the specified wait_timeout.
+
     Example:
         from timeout_sampler import retry
 
@@ -401,6 +412,7 @@ def retry(
     """
 
     def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: dict[str, Any]) -> Any:
             for sample in TimeoutSampler(
                 func=func,

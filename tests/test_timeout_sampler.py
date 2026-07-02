@@ -515,3 +515,18 @@ class TestSensitiveKeyRedaction:
         assert "tuple-key-value" in log_output, "Tuple key value should be visible"
         assert "secret123" not in log_output, "String sensitive key should still be redacted"
         assert "***" in log_output, "Redacted placeholder should appear"
+
+    def test_deeply_nested_data_truncated(self):
+        """Data nested deeper than 20 levels should be truncated, not cause a stack overflow."""
+        nested = {"key": "value"}
+        for _ in range(25):
+            nested = {"level": nested}
+        sampler = TimeoutSampler(
+            wait_timeout=1,
+            sleep=1,
+            func=lambda: True,
+            print_log=False,
+            data=nested,
+        )
+        log_output = sampler._func_log
+        assert "<redacted: max depth exceeded>" in log_output
