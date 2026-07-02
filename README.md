@@ -14,7 +14,7 @@ python3 -m pip install timeout-sampler
 
 ```python
 from random import randint
-from timeout_sampler import TimeoutSampler, ExceptionFilter, ExceptionsDict
+from timeout_sampler import TimeoutSampler
 
 
 def random_number(start, end):
