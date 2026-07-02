@@ -202,7 +202,21 @@ class TimeoutSampler:
             return res
 
     def _redact(self, data: Any, _depth: int = 0) -> Any:
-        """Recursively redact values whose keys exactly match sensitive keys (case-insensitive)."""
+        """Recursively redact values whose keys exactly match sensitive keys (case-insensitive).
+
+        Traverses dicts, lists, and tuples up to a maximum depth. Dict values
+        whose key (lowercased) appears in ``self.sensitive_keys`` are replaced
+        with ``"***"``.
+
+        Args:
+            data: The data structure to redact. Supports dict, list, tuple, and
+                scalar values.
+            _depth: Current recursion depth (internal use). Data nested beyond
+                20 levels is replaced with a truncation sentinel.
+
+        Returns:
+            A redacted copy of *data* with the same structure.
+        """
         if _depth > 20:
             return "<redacted: max depth exceeded>"
         try:
