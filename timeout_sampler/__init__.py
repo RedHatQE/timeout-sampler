@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import functools
 import time
 from collections.abc import Callable
 from typing import Any
@@ -213,11 +214,11 @@ class TimeoutSampler:
             if isinstance(data, tuple):
                 return tuple(self._redact(item) for item in data)
         except RecursionError:
-            LOGGER.warning("Redaction failed due to circular reference in data")
+            LOGGER.warning(f"Redaction failed due to circular reference in data; data type: {type(data).__name__}")
             return "<redaction failed: circular reference>"
         return data
 
-    @property
+    @functools.cached_property
     def _func_log(self) -> str:
         _func_kwargs = (
             f"Kwargs: {self._redact(self.func_kwargs)}" if (self.print_func_args and self.func_kwargs) else ""

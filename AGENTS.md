@@ -5,7 +5,7 @@ Python utility library for timeout/retry polling patterns. Single module (~300 L
 
 ## Architecture
 Single-file library: `timeout_sampler/__init__.py`
-- `TimeoutSampler` — main class, generator-based polling with configurable exception filtering
+- `TimeoutSampler` — main class, generator-based polling with configurable exception filtering and sensitive key redaction
 - `TimeoutWatch` — elapsed time tracking utility
 - `TimeoutExpiredError` — raised when timeout expires, carries `last_exp` and `elapsed_time`
 - `retry` — decorator wrapping `TimeoutSampler` for function-level retry
