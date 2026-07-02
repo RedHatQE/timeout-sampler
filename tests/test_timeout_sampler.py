@@ -385,3 +385,167 @@ class TestCallableExceptionFilter:
                 exceptions_dict=invalid_dict,
                 print_log=False,
             )
+
+
+class TestSensitiveKeyRedaction:
+    @pytest.mark.parametrize(
+        "sampler_kwargs, must_not_contain, must_contain",
+        [
+            pytest.param(
+                {"headers": {"Authorization": "Bearer secret-token", "Content-Type": "application/json"}},
+                ["secret-token"],
+                ["***", "application/json"],
+                id="test_default_authorization_redacted",
+            ),
+            pytest.param(
+                {"config": {"api_key": "my-api-key", "timeout": 30}},  # pragma: allowlist secret
+                ["my-api-key"],
+                ["***", "30"],
+                id="test_nested_api_key_redacted",
+            ),
+            pytest.param(
+                {"data": {"password": "hunter2", "username": "admin"}},  # pragma: allowlist secret
+                ["hunter2"],
+                ["***", "admin"],
+                id="test_password_redacted",
+            ),
+            pytest.param(
+                {
+                    "sensitive_keys": frozenset({"my_secret_field"}),
+                    "my_secret_field": "top-secret",  # pragma: allowlist secret
+                    "safe_field": "visible",
+                },
+                ["top-secret"],
+                ["visible"],
+                id="test_custom_sensitive_keys",
+            ),
+            pytest.param(
+                {
+                    "sensitive_keys": frozenset({"x-custom-secret"}),
+                    "headers": {
+                        "Authorization": "Bearer default-secret",  # pragma: allowlist secret
+                        "x-custom-secret": "custom-value",  # pragma: allowlist secret
+                    },
+                },
+                ["default-secret", "custom-value"],
+                ["***"],
+                id="test_custom_keys_merged_with_defaults",
+            ),
+            pytest.param(
+                {"args_list": [{"token": "secret-in-list"}]},  # pragma: allowlist secret
+                ["secret-in-list"],
+                ["***"],
+                id="test_sensitive_key_in_list_of_dicts",
+            ),
+            pytest.param(
+                {
+                    "sensitive_keys": frozenset(),
+                    "headers": {"Authorization": "Bearer still-redacted"},
+                },
+                ["still-redacted"],
+                ["***"],
+                id="test_empty_sensitive_keys_still_uses_defaults",
+            ),
+            pytest.param(
+                {
+                    "print_func_args": False,
+                    "headers": {"Authorization": "Bearer secret"},
+                },
+                ["secret", "Kwargs"],
+                [],
+                id="test_print_func_args_false_hides_everything",
+            ),
+            pytest.param(
+                {"pagination": {"nextPageToken": "abc123", "token_count": 42, "Authorization": "Bearer redact-me"}},
+                ["redact-me"],
+                ["abc123", "42", "nextPageToken", "token_count"],
+                id="test_similar_named_keys_not_redacted",
+            ),
+            pytest.param(
+                {"headers": {"AUTHORIZATION": "Bearer upper-secret", "Content-Type": "text/plain"}},
+                ["upper-secret"],
+                ["***", "text/plain"],
+                id="test_uppercase_key_redacted",
+            ),
+            pytest.param(
+                {
+                    "sensitive_keys": frozenset({"X-My-Token"}),
+                    "headers": {"X-My-Token": "custom-upper"},  # pragma: allowlist secret
+                },
+                ["custom-upper"],
+                ["***"],
+                id="test_custom_key_case_insensitive",
+            ),
+        ],
+    )
+    def test_sensitive_key_redaction(self, sampler_kwargs, must_not_contain, must_contain):
+        """Sensitive kwargs should be redacted from log output based on configuration."""
+        sampler = TimeoutSampler(wait_timeout=1, sleep=1, func=lambda: True, print_log=False, **sampler_kwargs)
+        log_output = sampler._func_log
+        for value in must_not_contain:
+            assert value not in log_output, f"Value {value!r} should not appear in log"
+        for value in must_contain:
+            assert value in log_output, f"Value {value!r} should appear in log"
+
+    def test_positional_args_redacted(self):
+        """Sensitive keys in dicts passed as positional args should be redacted."""
+        sampler = TimeoutSampler(
+            wait_timeout=1,
+            sleep=1,
+            func=lambda *args: True,
+            print_log=False,
+            func_args=({"Authorization": "Bearer pos-secret", "safe": "visible"},),  # pragma: allowlist secret
+        )
+        log_output = sampler._func_log
+        assert "pos-secret" not in log_output, "Positional arg secret should be redacted"
+        assert "visible" in log_output, "Non-sensitive positional arg should be visible"
+        assert "***" in log_output, "Redacted placeholder should appear"
+
+    def test_non_string_dict_keys_not_crash(self):
+        """Dicts with non-string keys (int, tuple) should not crash _redact."""
+        sampler = TimeoutSampler(
+            wait_timeout=1,
+            sleep=1,
+            func=lambda: True,
+            print_log=False,
+            data={1: "int-key-value", (2, 3): "tuple-key-value", "password": "secret123"},  # pragma: allowlist secret
+        )
+        log_output = sampler._func_log
+        assert "int-key-value" in log_output, "Non-string key value should be visible"
+        assert "tuple-key-value" in log_output, "Tuple key value should be visible"
+        assert "secret123" not in log_output, "String sensitive key should still be redacted"
+        assert "***" in log_output, "Redacted placeholder should appear"
+
+    def test_deeply_nested_data_truncated(self):
+        """Data nested deeper than 20 levels should be truncated, not cause a stack overflow."""
+        nested = {"key": "value"}
+        for _ in range(25):
+            nested = {"level": nested}
+        sampler = TimeoutSampler(
+            wait_timeout=1,
+            sleep=1,
+            func=lambda: True,
+            print_log=False,
+            data=nested,
+        )
+        log_output = sampler._func_log
+        assert "<redacted: max depth exceeded>" in log_output
+
+    @pytest.mark.parametrize(
+        "invalid_keys",
+        [
+            pytest.param(frozenset({123, "valid"}), id="test_int_in_sensitive_keys"),
+            pytest.param({None, "valid"}, id="test_none_in_sensitive_keys"),
+            pytest.param(frozenset({True}), id="test_bool_in_sensitive_keys"),
+        ],
+    )
+    def test_non_string_sensitive_key_raises_type_error(self, invalid_keys):
+        """Passing non-string elements in sensitive_keys should raise TypeError."""
+        with pytest.raises(TypeError, match="sensitive_keys must contain only strings"):
+            TimeoutSampler(
+                wait_timeout=1,
+                sleep=1,
+                func=lambda: True,
+                print_log=False,
+                sensitive_keys=invalid_keys,
+            )

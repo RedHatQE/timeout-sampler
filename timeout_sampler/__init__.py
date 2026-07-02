@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import functools
 import time
 from collections.abc import Callable
 from typing import Any
@@ -96,7 +97,22 @@ class TimeoutSampler:
         print_log (bool): Print elapsed time to log.
         print_func_log (bool): Add function call info to log
         print_func_args (bool): Include function arguments in log when print_func_log is True
+        sensitive_keys (frozenset[str] | set[str] | None): Additional keys to redact from logged kwargs (case-insensitive exact match).
+            Merged with the default sensitive keys (authorization, token, access_token, password, secret, api_key, apikey).
+            Note: "token" matches any key named exactly "token" (any case) — keys like "nextPageToken" are not affected.
     """
+
+    _MAX_REDACT_DEPTH: int = 20
+
+    _DEFAULT_SENSITIVE_KEYS: frozenset[str] = frozenset({
+        "authorization",
+        "token",
+        "access_token",
+        "password",
+        "secret",
+        "api_key",
+        "apikey",
+    })
 
     def __init__(
         self,
@@ -107,6 +123,7 @@ class TimeoutSampler:
         print_log: bool = True,
         print_func_log: bool = True,
         print_func_args: bool = True,
+        sensitive_keys: frozenset[str] | set[str] | None = None,
         func_args: tuple[Any] | None = None,
         **func_kwargs: Any,
     ):
@@ -118,6 +135,13 @@ class TimeoutSampler:
         self.print_log = print_log
         self.print_func_log = print_func_log
         self.print_func_args = print_func_args
+        if sensitive_keys is not None:
+            for key in sensitive_keys:
+                if not isinstance(key, str):
+                    raise TypeError(f"sensitive_keys must contain only strings, got {type(key).__name__}: {key!r}")
+            self.sensitive_keys = self._DEFAULT_SENSITIVE_KEYS | frozenset(key.lower() for key in sensitive_keys)
+        else:
+            self.sensitive_keys = self._DEFAULT_SENSITIVE_KEYS
         self.exceptions_dict = self._validate_exceptions_dict(
             exceptions_dict=exceptions_dict if exceptions_dict is not None else {Exception: []}
         )
@@ -181,10 +205,47 @@ class TimeoutSampler:
                     return f"lambda: {free_vars_str}{'.'.join(_func.__code__.co_names)}"
             return res
 
-    @property
+    def _redact(self, data: Any, _depth: int = 0) -> Any:
+        """Recursively redact values whose keys exactly match sensitive keys (case-insensitive).
+
+        Traverses dicts, lists, and tuples up to a maximum depth. Dict values
+        whose key (lowercased) appears in ``self.sensitive_keys`` are replaced
+        with ``"***"``.
+
+        Args:
+            data: The data structure to redact. Supports dict, list, tuple, and
+                scalar values.
+            _depth: Current recursion depth (internal use). Data nested beyond
+                ``_MAX_REDACT_DEPTH`` levels is replaced with a truncation sentinel.
+
+        Returns:
+            A redacted copy of *data* with the same structure.
+        """
+        if _depth > self._MAX_REDACT_DEPTH:
+            return "<redacted: max depth exceeded>"
+        try:
+            if isinstance(data, dict):
+                return {
+                    key: "***"
+                    if isinstance(key, str) and key.lower() in self.sensitive_keys
+                    else self._redact(value, _depth=_depth + 1)
+                    for key, value in data.items()
+                }
+            if isinstance(data, list):
+                return [self._redact(item, _depth=_depth + 1) for item in data]
+            if isinstance(data, tuple):
+                return tuple(self._redact(item, _depth=_depth + 1) for item in data)
+        except RecursionError:
+            LOGGER.warning(f"Redaction failed due to circular reference in data; data type: {type(data).__name__}")
+            return "<redaction failed: circular reference>"
+        return data
+
+    @functools.cached_property
     def _func_log(self) -> str:
-        _func_kwargs = f"Kwargs: {self.func_kwargs}" if (self.print_func_args and self.func_kwargs) else ""
-        _func_args = f"Args: {self.func_args}" if (self.print_func_args and self.func_args) else ""
+        _func_kwargs = (
+            f"Kwargs: {self._redact(self.func_kwargs)}" if (self.print_func_args and self.func_kwargs) else ""
+        )
+        _func_args = f"Args: {self._redact(self.func_args)}" if (self.print_func_args and self.func_args) else ""
         _func_module = self._get_func_info(_func=self.func, type_="__module__")
         _func_name = self._get_func_info(_func=self.func, type_="__name__")
         return f"Function: {_func_module}.{_func_name} {_func_args} {_func_kwargs}".strip()
@@ -338,9 +399,27 @@ def retry(
     print_log: bool = True,
     print_func_log: bool = True,
     print_func_args: bool = True,
+    sensitive_keys: frozenset[str] | set[str] | None = None,
 ) -> Callable:
     """
     Decorator for TimeoutSampler, For usage see TimeoutSampler.
+
+    Args:
+        wait_timeout (int): Time in seconds to wait for func to return a value equating to True
+        sleep (int): Time in seconds between calls to func
+        exceptions_dict (dict): Exception handling definition
+        print_log (bool): Print elapsed time to log
+        print_func_log (bool): Add function call info to log
+        print_func_args (bool): Include function arguments in log
+        sensitive_keys (frozenset[str] | set[str] | None): Additional keys to redact from logged kwargs (case-insensitive exact match).
+            Merged with the default sensitive keys.
+
+    Returns:
+        Callable: The decorated function that will be retried on failure.
+
+    Raises:
+        TimeoutExpiredError: When the decorated function fails to return a truthy value
+            within the specified wait_timeout.
 
     Example:
         from timeout_sampler import retry
@@ -351,7 +430,8 @@ def retry(
     """
 
     def decorator(func: Callable) -> Callable:
-        def wrapper(*args: Any, **kwargs: dict[str, Any]) -> Any:
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             for sample in TimeoutSampler(
                 func=func,
                 wait_timeout=wait_timeout,
@@ -360,6 +440,7 @@ def retry(
                 print_log=print_log,
                 print_func_log=print_func_log,
                 print_func_args=print_func_args,
+                sensitive_keys=sensitive_keys,
                 func_args=args,
                 **kwargs,
             ):
