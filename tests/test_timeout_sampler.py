@@ -266,7 +266,7 @@ class TestCallableExceptionFilter:
         """Callable filter matches → retry → function eventually succeeds."""
         call_count = 0
 
-        def flaky_func():
+        def flaky_func() -> str:
             nonlocal call_count
             call_count += 1
             if call_count < 2:
@@ -365,5 +365,23 @@ class TestCallableExceptionFilter:
                 sleep=1,
                 func=lambda: None,
                 exceptions_dict={invalid_key: []},
+                print_log=False,
+            )
+
+    @pytest.mark.parametrize(
+        "invalid_dict",
+        [
+            pytest.param([], id="test_list_rejected"),
+            pytest.param("not a dict", id="test_string_rejected"),
+        ],
+    )
+    def test_non_dict_exceptions_dict_raises_type_error(self, invalid_dict: object) -> None:
+        """exceptions_dict must be a dict."""
+        with pytest.raises(TypeError, match="exceptions_dict must be a dict"):
+            TimeoutSampler(
+                wait_timeout=1,
+                sleep=1,
+                func=lambda: None,
+                exceptions_dict=invalid_dict,
                 print_log=False,
             )

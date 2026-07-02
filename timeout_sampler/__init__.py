@@ -136,6 +136,8 @@ class TimeoutSampler:
             TypeError: If keys aren't Exception subclasses, values aren't lists,
                 or filter items aren't strings/callables.
         """
+        if not isinstance(exceptions_dict, dict):
+            raise TypeError(f"exceptions_dict must be a dict, got {type(exceptions_dict).__name__}")
         for key, value in exceptions_dict.items():
             if not isinstance(key, type) or not issubclass(key, Exception):
                 raise TypeError(f"exceptions_dict key {key!r} must be an Exception subclass, got {type(key).__name__}")
