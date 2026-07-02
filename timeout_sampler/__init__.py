@@ -249,7 +249,8 @@ class TimeoutSampler:
             exception_filters (list): Either an empty list allowing all exceptions,
                 a list of strings to match against str(exception),
                 or callables that receive the exception and return a truthy value to ignore.
-                Callable filters that raise are logged as warnings and treated as non-matching.
+                Callables must accept exactly one positional argument (the exception instance).
+                Zero-arg or multi-arg callables will raise at runtime and be treated as non-matching.
 
         Returns:
             bool: True if exception should be ignored (retry), False otherwise
