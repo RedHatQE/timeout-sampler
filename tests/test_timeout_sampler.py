@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import NoReturn
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -165,6 +166,142 @@ def test_sampler_lambda_with_logging():
     pytest.fail("Sampler rise timeout")
 
 
+def test_log_context_does_not_log_on_retry(caplog):
+    call_count = 0
+
+    def flaky_success():
+        nonlocal call_count
+        call_count += 1
+        if call_count < 3:
+            raise ConnectionError("ssh down")
+        return True
+
+    for sample in TimeoutSampler(
+        wait_timeout=2,
+        sleep=0,
+        func=flaky_success,
+        log_context="SSH connectivity to test-vm",
+        exceptions_dict={ConnectionError: []},
+        print_func_log=False,
+    ):
+        if sample:
+            break
+
+    assert caplog.text.count("SSH connectivity to test-vm succeeded after") == 1
+    assert "failed after" not in caplog.text
+    assert "timed out after" not in caplog.text
+    assert "Elapsed time:" not in caplog.text
+
+
+def test_log_context_logs_success_when_elapsed_time_is_zero(caplog, monkeypatch):
+    mock_watch = MagicMock()
+    mock_watch.remaining_time.side_effect = [2.0, 2.0]
+
+    monkeypatch.setattr("timeout_sampler.TimeoutWatch", lambda timeout: mock_watch)
+
+    for sample in TimeoutSampler(
+        wait_timeout=2,
+        sleep=0,
+        func=lambda: True,
+        log_context="SSH connectivity to test-vm",
+        print_func_log=False,
+    ):
+        if sample:
+            break
+
+    assert "SSH connectivity to test-vm succeeded after 0.0s." in caplog.text
+
+
+def test_log_context_logs_non_retried_exception(caplog):
+    def always_fails():
+        raise ValueError("unexpected")
+
+    with pytest.raises(TimeoutExpiredError) as error_info:
+        for _ in TimeoutSampler(
+            wait_timeout=2,
+            sleep=0,
+            func=always_fails,
+            log_context="SSH connectivity to test-vm",
+            exceptions_dict={ConnectionError: []},
+            print_func_log=False,
+        ):
+            continue
+
+    assert "SSH connectivity to test-vm failed after" in caplog.text
+    assert "unexpected" in caplog.text
+    assert "Elapsed time:" not in caplog.text
+    assert error_info.value.elapsed_time is not None
+    assert error_info.value.last_exp is not None
+
+
+def test_log_context_logs_timeout_with_elapsed_time_on_exception(caplog):
+    with pytest.raises(TimeoutExpiredError) as error_info:
+        for _ in TimeoutSampler(
+            wait_timeout=2,
+            sleep=0,
+            func=lambda: (_ for _ in ()).throw(ConnectionError("ssh down")),
+            log_context="SSH connectivity to test-vm",
+            exceptions_dict={ConnectionError: []},
+            print_func_log=False,
+        ):
+            continue
+
+    assert "SSH connectivity to test-vm timed out after" in caplog.text
+    assert "ssh down" in caplog.text
+    assert "succeeded after" not in caplog.text
+    assert "Elapsed time:" not in caplog.text
+    assert error_info.value.elapsed_time is not None
+    assert error_info.value.last_exp is not None
+
+
+def test_without_log_context_uses_func_name_on_success(caplog):
+    for sample in TimeoutSampler(
+        wait_timeout=2,
+        sleep=0,
+        func=lambda: True,
+        print_func_log=False,
+    ):
+        if sample:
+            break
+
+    assert "succeeded after" in caplog.text
+    assert "Elapsed time:" not in caplog.text
+
+
+def test_without_log_context_uses_func_name_on_failure(caplog):
+    def always_fails():
+        raise ValueError("unexpected")
+
+    with pytest.raises(TimeoutExpiredError) as error_info:
+        for _ in TimeoutSampler(
+            wait_timeout=2,
+            sleep=0,
+            func=always_fails,
+            exceptions_dict={ConnectionError: []},
+            print_func_log=False,
+        ):
+            continue
+
+    assert "always_fails failed after" in caplog.text
+    assert "unexpected" in caplog.text
+    assert "Elapsed time:" not in caplog.text
+    assert error_info.value.elapsed_time is not None
+
+
+def test_without_log_context_uses_lambda_label_on_success(caplog):
+    for sample in TimeoutSampler(
+        wait_timeout=2,
+        sleep=0,
+        func=lambda: True,
+        print_func_log=False,
+    ):
+        if sample:
+            break
+
+    assert "lambda:" in caplog.text
+    assert "succeeded after" in caplog.text
+
+
 def test_sampler_negative():
     sampler = TimeoutSampler(
         wait_timeout=10,
@@ -206,6 +343,29 @@ def test_decorator():
 def test_decorator_negative():
     with pytest.raises(TimeoutExpiredError):
         never_succeeds()
+
+
+def test_retry_decorator_with_log_context(caplog):
+    call_count = 0
+
+    @retry(
+        wait_timeout=2,
+        sleep=0,
+        exceptions_dict={ConnectionError: []},
+        log_context="retry-check",
+        print_func_log=False,
+    )
+    def flaky():
+        nonlocal call_count
+        call_count += 1
+        if call_count < 2:
+            raise ConnectionError("fail")
+        return True
+
+    flaky()
+    assert call_count == 2
+    assert "retry-check succeeded after" in caplog.text
+    assert "Elapsed time:" not in caplog.text
 
 
 # callable filter tests
