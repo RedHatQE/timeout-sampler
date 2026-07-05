@@ -185,5 +185,5 @@ for item in items:
 - [TimeoutWatch API](api-timeout-watch.html)
 - [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
 - [TimeoutSampler API](api-timeout-sampler.html)
-- [TimeoutExpiredError Reference](api-exceptions.html)
 - [Common Polling Patterns](common-polling-patterns.html)
+- [TimeoutExpiredError Reference](api-exceptions.html)

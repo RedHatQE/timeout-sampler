@@ -143,6 +143,27 @@
                 </ul>
             </div>
 
+            <div class="nav-group">
+                <h3 class="nav-group-title">Guides</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="sensitive-key-redaction.html"
+                           class="nav-link">
+                            Redacting Sensitive Data from Log Output
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="callable-exception-filters.html"
+                           class="nav-link">
+                            Using Callable Exception Filters
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
         </nav>
     </aside>
 
@@ -414,13 +435,14 @@ Elapsed time: 4.02 [0:00:04.020000]
 <li><a href="api-retry-decorator.html">@retry Decorator API</a> — decorator that raises <code>TimeoutExpiredError</code> on timeout</li>
 <li><a href="handling-exceptions.html">Filtering and Handling Exceptions</a> — configuring <code>exceptions_dict</code> to control which exceptions trigger an immediate <code>TimeoutExpiredError</code> vs. being silently retried</li>
 <li><a href="exception-matching-logic.html">How Exception Matching Works</a> — the algorithm that determines whether an exception is matched or causes <code>TimeoutExpiredError</code></li>
+<li><a href="tracking-elapsed-time.html">Tracking Elapsed Time with TimeoutWatch</a> — using <code>TimeoutWatch</code> to track elapsed time during polling</li>
 </ul>
 <h2 id="related-pages_1">Related Pages</h2>
 <ul>
+<li><a href="exception-matching-logic.html">How Exception Matching Works</a></li>
 <li><a href="handling-exceptions.html">Filtering and Handling Exceptions</a></li>
 <li><a href="api-timeout-sampler.html">TimeoutSampler API</a></li>
 <li><a href="api-retry-decorator.html">@retry Decorator API</a></li>
-<li><a href="exception-matching-logic.html">How Exception Matching Works</a></li>
 <li><a href="tracking-elapsed-time.html">Tracking Elapsed Time with TimeoutWatch</a></li>
 </ul>
                 </div>
@@ -474,7 +496,7 @@ Elapsed time: 4.02 [0:00:04.020000]
 
         <footer class="page-footer">
 
-            <span class="footer-version">Generated from version 1.0.22</span>
+            <span class="footer-version">Generated from version 1.1.0</span>
             <span class="footer-sep">&middot;</span>
 
             Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>

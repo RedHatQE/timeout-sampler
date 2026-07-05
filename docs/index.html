@@ -143,6 +143,27 @@
                 </ul>
             </div>
 
+            <div class="nav-group">
+                <h3 class="nav-group-title">Guides</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="sensitive-key-redaction.html"
+                           class="nav-link">
+                            Redacting Sensitive Data from Log Output
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="callable-exception-filters.html"
+                           class="nav-link">
+                            Using Callable Exception Filters
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
         </nav>
     </aside>
 
@@ -186,6 +207,8 @@
             <section class="index-header">
                 <h1 class="index-title">timeout-sampler</h1>
                 <p class="index-tagline">Poll any function until it succeeds or times out, with fine-grained exception handling</p>
+
+
 
 
 
@@ -341,6 +364,30 @@
 
                 </div>
 
+                <div class="card">
+                    <h3 class="card-title">Guides</h3>
+                    <ul class="card-pages">
+
+                        <li>
+                            <a href="sensitive-key-redaction.html">Redacting Sensitive Data from Log Output</a>
+
+                            <p class="card-page-desc">Document the sensitive_keys parameter available on both TimeoutSampler and @retry, explain the built-in default sensitive keys (authorization, token, access_token, password, secret, api_key, apikey), show how to add custom keys via the sensitive_keys parameter, and describe the recursive redaction behavior that masks values in nested dicts, lists, and tuples in logged arguments.</p>
+
+                        </li>
+
+                        <li>
+                            <a href="callable-exception-filters.html">Using Callable Exception Filters</a>
+
+                            <p class="card-page-desc">Document the ability to use callable (lambda or function) filters in exceptions_dict values alongside string filters. Cover the ExceptionFilter and ExceptionsDict public type aliases, explain that callables receive the exception instance and return a truthy value to ignore/retry, show examples like filtering by exception attributes (e.g., HTTP status codes), combining string and callable filters in the same list, and describe error handling when a callable filter itself raises.</p>
+
+                        </li>
+
+                    </ul>
+
+                    <a href="sensitive-key-redaction.html" class="card-link">Explore →</a>
+
+                </div>
+
             </section>
 
             <div class="llm-docs-banner">
@@ -360,7 +407,7 @@
 
         <footer class="page-footer">
 
-            <span class="footer-version">Generated from version 1.0.22</span>
+            <span class="footer-version">Generated from version 1.1.0</span>
             <span class="footer-sep">&middot;</span>
 
             Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>

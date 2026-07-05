@@ -161,6 +161,50 @@ The sampler checks whether the raised exception's string representation *contain
 
 > **Warning:** Message matching uses substring `in` checks, not exact equality. The filter `"not found"` will also match `"resource not found in namespace"`.
 
+## Filter Exceptions with Callables
+
+Use callable filters to retry based on exception attributes instead of message text. The callable receives the exception instance and should return a truthy value to ignore (retry).
+
+```python
+from timeout_sampler import TimeoutSampler
+
+class HttpError(Exception):
+    def __init__(self, status: int, message: str) -> None:
+        self.status = status
+        super().__init__(message)
+
+def make_request():
+    # ... HTTP call that may raise HttpError ...
+    return True
+
+# Only retry on HTTP 5xx errors; 4xx errors raise immediately.
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    exceptions_dict={HttpError: [lambda exc: exc.status >= 500]},
+):
+    if sample:
+        break
+```
+
+Callable filters are useful when the exception carries structured data (status codes, error categories, retry hints) that cannot be matched with simple substring checks.
+
+> **Tip:** Callable and string filters can be combined in the same list. The exception is ignored if **any** filter matches.
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    exceptions_dict={HttpError: ["connection refused", lambda exc: exc.status >= 500]},
+):
+    if sample:
+        break
+```
+
+This retries on any `HttpError` whose message contains `"connection refused"` **or** whose `status` attribute is 500 or above.
+
 ## Combine Multiple Exception Filters
 
 Handle several exception types, each with independent message filters.
@@ -275,6 +319,42 @@ Setting `print_log=False` suppresses elapsed-time messages, and `print_func_log=
 
 See [Controlling Log Output](controlling-logging.html) for fine-grained logging options including `print_func_args`.
 
+## Redact Sensitive Data from Logs
+
+Sensitive kwargs such as `Authorization`, `token`, `password`, and `api_key` are automatically redacted from log output.
+
+```python
+from timeout_sampler import TimeoutSampler
+
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    headers={"Authorization": "Bearer my-secret-token"},
+):
+    if sample:
+        break
+# Log output will show: Kwargs: {'headers': {'Authorization': '***'}}
+```
+
+The default sensitive keys are: `authorization`, `token`, `access_token`, `password`, `secret`, `api_key`, and `apikey`. Matching is case-insensitive and exact (e.g., `"token"` matches a key named `Token` but not `nextPageToken`).
+
+To add custom sensitive keys, pass `sensitive_keys` — they are merged with the defaults:
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=call_api,
+    sensitive_keys=frozenset({"x-custom-secret"}),
+    headers={"Authorization": "Bearer token", "x-custom-secret": "value"}, # pragma: allowlist secret
+):
+    if sample:
+        break
+```
+
+> **Note:** Redaction applies recursively to nested dicts, lists, and tuples in kwargs. The `sensitive_keys` parameter is also available on the `@retry` decorator.
+
 ## Track Remaining Time Across Multiple Polling Steps
 
 Use `TimeoutWatch` to share a single time budget across sequential polling operations.
@@ -342,7 +422,7 @@ See [TimeoutExpiredError Reference](api-exceptions.html) for all available attri
 ## Related Pages
 
 - [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
-- [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
 - [Filtering and Handling Exceptions](handling-exceptions.html)
+- [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
 - [Tracking Elapsed Time with TimeoutWatch](tracking-elapsed-time.html)
-- [How Exception Matching Works](exception-matching-logic.html)
+- [Redacting Sensitive Data from Log Output](sensitive-key-redaction.html)

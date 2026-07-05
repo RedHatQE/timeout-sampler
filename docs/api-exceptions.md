@@ -189,11 +189,12 @@ assert "Elapsed time: 29.87" in str(err)
 - [@retry Decorator API](api-retry-decorator.html) — decorator that raises `TimeoutExpiredError` on timeout
 - [Filtering and Handling Exceptions](handling-exceptions.html) — configuring `exceptions_dict` to control which exceptions trigger an immediate `TimeoutExpiredError` vs. being silently retried
 - [How Exception Matching Works](exception-matching-logic.html) — the algorithm that determines whether an exception is matched or causes `TimeoutExpiredError`
+- [Tracking Elapsed Time with TimeoutWatch](tracking-elapsed-time.html) — using `TimeoutWatch` to track elapsed time during polling
 
 ## Related Pages
 
+- [How Exception Matching Works](exception-matching-logic.html)
 - [Filtering and Handling Exceptions](handling-exceptions.html)
 - [TimeoutSampler API](api-timeout-sampler.html)
 - [@retry Decorator API](api-retry-decorator.html)
-- [How Exception Matching Works](exception-matching-logic.html)
 - [Tracking Elapsed Time with TimeoutWatch](tracking-elapsed-time.html)

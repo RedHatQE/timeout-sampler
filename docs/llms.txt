@@ -28,3 +28,8 @@
 ## Internals
 
 - [How Exception Matching Works](exception-matching-logic.md): Understand the inheritance-aware exception matching algorithm, message filtering, and the three outcome categories when an exception is raised inside the polled function
+
+## Guides
+
+- [Redacting Sensitive Data from Log Output](sensitive-key-redaction.md): Document the sensitive_keys parameter available on both TimeoutSampler and @retry, explain the built-in default sensitive keys (authorization, token, access_token, password, secret, api_key, apikey), show how to add custom keys via the sensitive_keys parameter, and describe the recursive redaction behavior that masks values in nested dicts, lists, and tuples in logged arguments.
+- [Using Callable Exception Filters](callable-exception-filters.md): Document the ability to use callable (lambda or function) filters in exceptions_dict values alongside string filters. Cover the ExceptionFilter and ExceptionsDict public type aliases, explain that callables receive the exception instance and return a truthy value to ignore/retry, show examples like filtering by exception attributes (e.g., HTTP status codes), combining string and callable filters in the same list, and describe error handling when a callable filter itself raises.
