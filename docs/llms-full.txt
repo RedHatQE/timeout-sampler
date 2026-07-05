@@ -8,7 +8,7 @@ Source: quickstart.md
 
 ## Prerequisites
 
-- Python 3.9 or later
+- Python 3.10 or later
 - `pip` (or any Python package manager)
 
 ## Install
@@ -143,6 +143,8 @@ for sample in TimeoutSampler(
 
 - `{ConnectionError: []}` — ignore all `ConnectionError` instances (and subclasses) and keep polling.
 - `{ConnectionError: ["refused"]}` — only ignore a `ConnectionError` whose message contains `"refused"`; any other `ConnectionError` re-raises immediately.
+- `{HttpError: [lambda exc: exc.status >= 500]}` — use a **callable filter** to retry only when the exception's `status` attribute is 500 or above; 4xx errors re-raise immediately.
+- `{HttpError: ["connection refused", lambda exc: exc.status >= 500]}` — combine string and callable filters in the same list; the exception is ignored if *any* filter matches.
 - `{}` — do **not** ignore any exceptions; every exception re-raises immediately.
 
 > **Warning:** Passing an empty dict `{}` means *no* exceptions are caught. If you want to catch all exceptions (the default), omit `exceptions_dict` entirely or pass `{Exception: []}`.
@@ -169,6 +171,23 @@ for sample in TimeoutSampler(
     if sample:
         break
 ```
+
+Sensitive keyword arguments such as `Authorization`, `token`, `password`, and `api_key` are **automatically redacted** from log output. To add your own keys, pass `sensitive_keys`:
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=call_api,
+    sensitive_keys=frozenset({"x-custom-secret"}),
+    headers={"Authorization": "Bearer token", "x-custom-secret": "value"}, # pragma: allowlist secret
+):
+    if sample:
+        break
+# Log output: Kwargs: {'headers': {'Authorization': '***', 'x-custom-secret': '***'}}
+```
+
+> **Tip:** The default sensitive keys are `authorization`, `token`, `access_token`, `password`, `secret`, `api_key`, and `apikey` (case-insensitive exact match). Custom keys from `sensitive_keys` are merged with the defaults.
 
 See [Controlling Log Output](controlling-logging.html) for details.
 
@@ -203,9 +222,9 @@ See [Tracking Elapsed Time with TimeoutWatch](tracking-elapsed-time.html) for mo
 
 - [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
 - [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
-- [Filtering and Handling Exceptions](handling-exceptions.html)
-- [Common Polling Patterns](common-polling-patterns.html)
 - [TimeoutSampler API](api-timeout-sampler.html)
+- [Common Polling Patterns](common-polling-patterns.html)
+- [Filtering and Handling Exceptions](handling-exceptions.html)
 
 ---
 
@@ -332,6 +351,7 @@ for sample in TimeoutSampler(
 
 - An empty list `[]` means "ignore this exception regardless of its message."
 - A list of strings matches against the exception message text — only matching messages are ignored.
+- A list can also contain **callables** that receive the exception instance and return a truthy value to ignore (retry).
 
 ```python
 exceptions_dict = {
@@ -340,7 +360,34 @@ exceptions_dict = {
 }
 ```
 
-Any exception **not** listed (or listed but with a non-matching message) is immediately re-raised as a `TimeoutExpiredError`.
+Use callable filters to retry based on exception attributes:
+
+```python
+# Only retry on HTTP 5xx errors; 4xx errors raise immediately.
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    exceptions_dict={HttpError: [lambda exc: exc.status >= 500]},
+):
+    if sample:
+        break
+```
+
+Callable and string filters can be combined in the same list:
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    exceptions_dict={HttpError: ["connection refused", lambda exc: exc.status >= 500]},
+):
+    if sample:
+        break
+```
+
+Any exception **not** listed (or listed but with a non-matching message/callable) is immediately re-raised as a `TimeoutExpiredError`.
 
 For full details on exception filtering, see [Filtering and Handling Exceptions](handling-exceptions.html) and [How Exception Matching Works](exception-matching-logic.html).
 
@@ -365,6 +412,38 @@ for sample in TimeoutSampler(
     if sample:
         break
 ```
+
+#### Redacting Sensitive Data from Logs
+
+Sensitive keyword argument values (such as `Authorization`, `token`, `password`, `secret`, `api_key`, and `apikey`) are automatically redacted from log output:
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    headers={"Authorization": "Bearer my-secret-token"},
+):
+    if sample:
+        break
+# Log output will show: Kwargs: {'headers': {'Authorization': '***'}}
+```
+
+To add custom sensitive keys (merged with the defaults), use the `sensitive_keys` parameter:
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=call_api,
+    sensitive_keys=frozenset({"x-custom-secret"}),
+    headers={"Authorization": "Bearer token", "x-custom-secret": "value"}, # pragma: allowlist secret
+):
+    if sample:
+        break
+```
+
+> **Note:** Key matching is case-insensitive and uses exact match — a key named `"token"` is redacted, but `"nextPageToken"` is not.
 
 See [Controlling Log Output](controlling-logging.html) for more on logging behavior.
 
@@ -418,7 +497,7 @@ Make sure your break condition actually matches the return value. Yielded sample
 - [TimeoutSampler API](api-timeout-sampler.html)
 - [Filtering and Handling Exceptions](handling-exceptions.html)
 - [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
-- [Common Polling Patterns](common-polling-patterns.html)
+- [Controlling Log Output](controlling-logging.html)
 
 ---
 
@@ -463,10 +542,11 @@ That's it — the decorator handles all the polling. If `check_service_health()`
 |---|---|---|---|
 | `wait_timeout` | `int` | *(required)* | Maximum seconds to keep retrying |
 | `sleep` | `int` | *(required)* | Seconds to wait between each attempt |
-| `exceptions_dict` | `dict` | `None` | Exceptions to tolerate during polling |
+| `exceptions_dict` | `ExceptionsDict \| None` | `None` | Exceptions to tolerate during polling. Keys are exception classes; values are lists of string or callable filters. |
 | `print_log` | `bool` | `True` | Log elapsed time to console |
 | `print_func_log` | `bool` | `True` | Log function call details |
 | `print_func_args` | `bool` | `True` | Include arguments in the function log |
+| `sensitive_keys` | `frozenset[str] \| set[str] \| None` | `None` | Additional keys to redact from logged kwargs (case-insensitive). Merged with built-in defaults (`authorization`, `token`, `password`, `secret`, `api_key`, etc.). |
 
 > **Tip:** For a complete parameter reference, see [@retry Decorator API](api-retry-decorator.html).
 
@@ -547,7 +627,11 @@ print(data)  # The truthy value your function returned
 
 ### Tolerating Specific Exceptions
 
-Use `exceptions_dict` to tell the decorator which exceptions should be ignored during polling instead of stopping execution. The keys are exception classes, and the values are lists of substring patterns to match against the exception message. An empty list matches all messages for that exception type.
+Use `exceptions_dict` to tell the decorator which exceptions should be ignored during polling instead of stopping execution. The keys are exception classes, and the values are lists of filters. Each filter can be:
+
+- A **string** — matched as a substring against the exception message
+- A **callable** — receives the exception instance and returns a truthy value to ignore (retry)
+- An **empty list** — matches all instances of that exception type
 
 ```python
 @retry(
@@ -574,6 +658,32 @@ def connect_to_service():
 ```
 
 Only `ConnectionError` exceptions containing `"Connection refused"` in their message text are tolerated. Other `ConnectionError` messages will stop polling.
+
+You can also use callable filters to match on exception attributes:
+
+```python
+@retry(
+    wait_timeout=60,
+    sleep=1,
+    exceptions_dict={HttpError: [lambda exc: exc.status >= 500]},
+)
+def make_api_call():
+    return requests.get("https://my-service/api").json()
+```
+
+Only `HttpError` exceptions where `status >= 500` are tolerated — 4xx errors stop polling immediately.
+
+String and callable filters can be combined in the same list. The exception is tolerated if **any** filter matches:
+
+```python
+@retry(
+    wait_timeout=60,
+    sleep=1,
+    exceptions_dict={HttpError: ["connection refused", lambda exc: exc.status >= 500]},
+)
+def make_api_call():
+    return requests.get("https://my-service/api").json()
+```
 
 > **Note:** For a detailed explanation of how exception matching and inheritance work, see [How Exception Matching Works](exception-matching-logic.html). For more `exceptions_dict` patterns, see [Filtering and Handling Exceptions](handling-exceptions.html).
 
@@ -602,6 +712,26 @@ def check_with_secrets(api_key):
     return validate(api_key)
 ```
 
+### Redacting Sensitive Kwargs
+
+Sensitive keyword argument values (such as `Authorization`, `token`, `password`, `secret`, `api_key`, and `apikey`) are automatically replaced with `"***"` in log output. You can add your own keys with `sensitive_keys`:
+
+```python
+@retry(
+    wait_timeout=30,
+    sleep=5,
+    sensitive_keys=frozenset({"x-custom-secret"}),
+)
+def call_api(headers):
+    return requests.get("https://my-service/api", headers=headers).ok
+
+# The "x-custom-secret" value will appear as "***" in logs
+call_api(headers={"Authorization": "Bearer token", "x-custom-secret": "value"}) # pragma: allowlist secret
+```
+
+> **Note:** Key matching is case-insensitive and uses exact match — a key named `"token"` is redacted, but `"nextPageToken"` is not.
+
+
 > **Tip:** For more detail on logging options, see [Controlling Log Output](controlling-logging.html).
 
 ### When to Use @retry vs. TimeoutSampler
@@ -627,7 +757,7 @@ If your function raises an exception that isn't listed in `exceptions_dict`, pol
 
 **Logs are too noisy**
 
-Set `print_log=False` to suppress timing output, or set `print_func_args=False` to hide sensitive argument values. See [Controlling Log Output](controlling-logging.html).
+Set `print_log=False` to suppress timing output, or set `print_func_args=False` to hide sensitive argument values. To redact specific keys rather than hiding all arguments, use `sensitive_keys`. See [Controlling Log Output](controlling-logging.html).
 
 ## Related Pages
 
@@ -635,7 +765,7 @@ Set `print_log=False` to suppress timing output, or set `print_func_args=False` 
 - [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
 - [Filtering and Handling Exceptions](handling-exceptions.html)
 - [Controlling Log Output](controlling-logging.html)
-- [How Exception Matching Works](exception-matching-logic.html)
+- [Getting Started with timeout-sampler](quickstart.html)
 
 ---
 
@@ -670,10 +800,16 @@ An empty list `[]` means "ignore this exception regardless of its message text."
 
 ## How `exceptions_dict` Works
 
-The `exceptions_dict` parameter is a dictionary that maps exception classes to lists of allowed message strings:
+The `exceptions_dict` parameter is a dictionary that maps exception classes to lists of filters. Each filter is either a substring to match against the exception message, or a callable that receives the exception and returns a truthy value to ignore it:
 
 ```python
-exceptions_dict: dict[type[Exception], list[str]] | None
+from timeout_sampler import ExceptionsDict, ExceptionFilter
+
+# Type aliases (importable from timeout_sampler):
+# ExceptionFilter = str | Callable[[Exception], bool]
+# ExceptionsDict = dict[type[Exception], list[ExceptionFilter]]
+
+exceptions_dict: ExceptionsDict | None
 ```
 
 | Value | Meaning |
@@ -681,6 +817,8 @@ exceptions_dict: dict[type[Exception], list[str]] | None
 | `{SomeError: []}` | Ignore **all** `SomeError` exceptions (any message) |
 | `{SomeError: ["connection refused"]}` | Ignore `SomeError` only when the message **contains** `"connection refused"` |
 | `{SomeError: ["timeout", "refused"]}` | Ignore `SomeError` when the message contains `"timeout"` **or** `"refused"` |
+| `{SomeError: [lambda exc: exc.status >= 500]}` | Ignore `SomeError` only when the callable returns a truthy value |
+| `{SomeError: ["refused", lambda exc: exc.retry]}` | Ignore when **any** filter matches (string **or** callable) |
 | `{}` | Ignore **nothing** — any exception immediately stops polling |
 | `None` (or omitted) | Defaults to `{Exception: []}` — ignore all exceptions |
 
@@ -728,7 +866,50 @@ Here, a `RuntimeError("service temporarily unavailable")` is ignored (substring 
 
 > **Note:** Message matching uses a simple substring check (`msg in str(exception)`), not regex. The match is case-sensitive.
 
-### 3. Handle Multiple Exception Types
+### 3. Match with a Callable Filter
+
+When you need to inspect exception attributes (not just the message text), use a callable filter. The callable receives the exception instance and should return a truthy value to ignore (retry):
+
+```python
+from timeout_sampler import TimeoutSampler
+
+# Only retry on HTTP 5xx errors; 4xx errors raise immediately
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    exceptions_dict={HttpError: [lambda exc: exc.status >= 500]},
+):
+    if sample:
+        break
+```
+
+Here, an `HttpError` with `status=502` is ignored, but an `HttpError` with `status=404` immediately stops polling.
+
+> **Tip:** Callable filters must accept exactly one positional argument (the exception instance). If a callable raises an error at runtime (e.g., accessing a missing attribute), it is logged as a warning and treated as non-matching.
+
+### 4. Combine String and Callable Filters
+
+String and callable filters can be mixed in the same list. The exception is ignored if **any** filter matches:
+
+```python
+from timeout_sampler import TimeoutSampler
+
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    exceptions_dict={
+        HttpError: ["connection refused", lambda exc: exc.status >= 500],
+    },
+):
+    if sample:
+        break
+```
+
+This ignores `HttpError` when the message contains `"connection refused"` **or** when the status code is 500+.
+
+### 5. Handle Multiple Exception Types
 
 Add multiple entries to the dictionary, each with its own message filter:
 
@@ -749,7 +930,7 @@ for sample in TimeoutSampler(
         break
 ```
 
-### 4. Re-raise All Exceptions (No Filtering)
+### 6. Re-raise All Exceptions (No Filtering)
 
 Pass an empty dictionary to ensure any exception immediately stops polling:
 
@@ -766,7 +947,7 @@ for sample in TimeoutSampler(
         break
 ```
 
-### 5. Use with the `@retry` Decorator
+### 7. Use with the `@retry` Decorator
 
 The `exceptions_dict` parameter works identically with the `@retry` decorator:
 
@@ -810,8 +991,8 @@ This means you can filter broadly by specifying a base class, or narrowly by spe
 
 When your polled function raises an exception, exactly one of three things happens:
 
-1. **Exact match or child class, message matches** → exception is ignored, polling continues
-2. **Exact match or child class, message does NOT match** → polling stops, `TimeoutExpiredError` is raised immediately
+1. **Exact match or child class, filter matches** (substring found or callable returns truthy) → exception is ignored, polling continues
+2. **Exact match or child class, no filter matches** → polling stops, `TimeoutExpiredError` is raised immediately
 3. **Exception type not in `exceptions_dict`** → polling stops, `TimeoutExpiredError` is raised immediately
 
 For a deeper look at the matching algorithm, see [How Exception Matching Works](exception-matching-logic.html).
@@ -842,16 +1023,28 @@ except TimeoutExpiredError as e:
 
 See [TimeoutExpiredError Reference](api-exceptions.html) for all available attributes.
 
-### Empty Strings in Message Lists
+### Input Validation
 
-An empty string in the message list is **not** treated as a wildcard — it is explicitly skipped. Use an empty list `[]` instead to match all messages:
+The `exceptions_dict` is validated at `__init__` time. Invalid configurations raise `TypeError` immediately:
+
+- **Empty strings** in filter lists are rejected — use an empty list `[]` to match all messages
+- **Non-string, non-callable** filter items (e.g., `int`, `None`) are rejected
+- **Classes** passed as filter items (e.g., `{ValueError: [TypeError]}`) are rejected — use a lambda instead
+- **Keys** must be `Exception` subclasses
+- **Values** must be lists
 
 ```python
-# ❌ WRONG — the empty string "" is ignored, so NO messages match
+# ❌ WRONG — empty string raises TypeError at init
 exceptions_dict = {ValueError: [""]}
+
+# ❌ WRONG — class passed as filter raises TypeError at init
+exceptions_dict = {ValueError: [TypeError]}
 
 # ✅ CORRECT — empty list means "match all messages"
 exceptions_dict = {ValueError: []}
+
+# ✅ CORRECT — callable filter
+exceptions_dict = {ValueError: [lambda exc: "retry" in str(exc)]}
 ```
 
 ## Troubleshooting
@@ -861,15 +1054,17 @@ exceptions_dict = {ValueError: []}
 | All exceptions are swallowed silently | `exceptions_dict` was omitted (defaults to `{Exception: []}`) | Pass an explicit `exceptions_dict` with only the types you want to ignore |
 | Exception is not being ignored | The raised exception is a **parent** of the class in `exceptions_dict`, not a child | Add the parent class to `exceptions_dict`, or use a broader base class |
 | Message filter doesn't match | Substring matching is case-sensitive | Verify the exact exception message text and case |
-| `TimeoutExpiredError` raised immediately despite exception being in dict | The exception message doesn't contain any of the specified substrings | Use `[]` to ignore all messages, or add the correct substring |
+| Callable filter not working | The callable raises an error (e.g., accessing a missing attribute) | Check logs for "treating as non-matching" warnings; fix the callable |
+| `TypeError` raised at init | Invalid `exceptions_dict` format (empty string, non-callable item, class as filter) | See [Input Validation](#input-validation) for valid formats |
+| `TimeoutExpiredError` raised immediately despite exception being in dict | No filter in the list matches (neither substring nor callable) | Use `[]` to ignore all messages, or add the correct filter |
 
 ## Related Pages
 
 - [How Exception Matching Works](exception-matching-logic.html)
+- [Using Callable Exception Filters](callable-exception-filters.html)
 - [TimeoutExpiredError Reference](api-exceptions.html)
 - [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
 - [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
-- [TimeoutSampler API](api-timeout-sampler.html)
 
 ---
 
@@ -938,7 +1133,7 @@ Elapsed time: 5.002 [0:00:05.002000]
 
 ### 2. Hide arguments only
 
-When function arguments contain secrets or are too verbose:
+When function arguments are too verbose:
 
 ```python
 sampler = TimeoutSampler(
@@ -959,6 +1154,8 @@ Elapsed time: 5.002 [0:00:05.002000]
 ```
 
 The function name and module are still logged, but `Args` and `Kwargs` are omitted.
+
+> **Tip:** If you want to keep argument logging but hide sensitive values like passwords or tokens, use the `sensitive_keys` parameter instead of disabling arguments entirely. See [Automatic Sensitive Key Redaction](#automatic-sensitive-key-redaction) below.
 
 ### 3. Hide function details entirely
 
@@ -1079,6 +1276,57 @@ for sample in TimeoutSampler(
 
 The log will show the resolved underlying function name rather than `functools.partial`.
 
+### Automatic Sensitive Key Redaction
+
+When `print_func_args=True` (the default), `TimeoutSampler` automatically redacts values for common sensitive keyword argument keys before logging. Redacted values appear as `"***"` in the log output.
+
+The default sensitive keys are: `authorization`, `token`, `access_token`, `password`, `secret`, `api_key`, and `apikey`. Matching is **case-insensitive** and **exact** — a key like `nextPageToken` is *not* redacted because it doesn't exactly match `token`.
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    headers={"Authorization": "Bearer my-secret-token"},
+):
+    if sample:
+        break
+# Log output: Kwargs: {'headers': {'Authorization': '***'}}
+```
+
+Redaction works recursively through nested dicts, lists, and tuples.
+
+#### Adding custom sensitive keys
+
+Pass `sensitive_keys` to add your own keys. Custom keys are **merged** with the defaults — they don't replace them:
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=call_api,
+    sensitive_keys=frozenset({"x-custom-secret"}),
+    headers={"Authorization": "Bearer token", "x-custom-secret": "value"}, # pragma: allowlist secret
+):
+    if sample:
+        break
+# Both "Authorization" and "x-custom-secret" values are redacted
+```
+
+The `sensitive_keys` parameter accepts `frozenset[str]` or `set[str]`. Passing an empty `frozenset()` still uses the default keys.
+
+> **Warning:** `sensitive_keys` must contain only strings. Passing non-string elements raises `TypeError` at construction time.
+
+The `sensitive_keys` parameter is also available on the `@retry` decorator:
+
+```python
+from timeout_sampler import retry
+
+@retry(wait_timeout=30, sleep=5, sensitive_keys=frozenset({"x-api-secret"}))
+def fetch_data(x_api_secret):
+    return requests.get("https://api.example.com", headers={"x-api-secret": x_api_secret}).ok
+```
+
 ### Selective Logging in Test Suites
 
 When writing tests, suppress logging to keep test output clean:
@@ -1102,6 +1350,9 @@ The `print_func_args` parameter controls argument visibility in both the log out
 **I want to customize the logger itself**
 `timeout-sampler` uses `python-simple-logger` for its logging backend. The log parameters described on this page control *what* is logged, not *where* or *how*. To configure log levels, formats, or destinations, refer to `python-simple-logger` documentation.
 
+**Sensitive values still appear in logs**
+Redaction only applies to dict keys that exactly match (case-insensitive) a known sensitive key. If your secret is under a non-standard key name, add it via `sensitive_keys=frozenset({"my_key"})`. Redaction applies to kwargs, positional args containing dicts, and nested structures.
+
 ## Related Pages
 
 - [TimeoutSampler API](api-timeout-sampler.html)
@@ -1109,6 +1360,14 @@ The `print_func_args` parameter controls argument visibility in both the log out
 - [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
 - [@retry Decorator API](api-retry-decorator.html)
 - [TimeoutExpiredError Reference](api-exceptions.html)
+
+## Related Pages
+
+- [Redacting Sensitive Data from Log Output](sensitive-key-redaction.html)
+- [TimeoutSampler API](api-timeout-sampler.html)
+- [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
+- [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
+- [@retry Decorator API](api-retry-decorator.html)
 
 ---
 
@@ -1301,8 +1560,8 @@ for item in items:
 - [TimeoutWatch API](api-timeout-watch.html)
 - [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
 - [TimeoutSampler API](api-timeout-sampler.html)
-- [TimeoutExpiredError Reference](api-exceptions.html)
 - [Common Polling Patterns](common-polling-patterns.html)
+- [TimeoutExpiredError Reference](api-exceptions.html)
 
 ---
 
@@ -1471,6 +1730,50 @@ The sampler checks whether the raised exception's string representation *contain
 
 > **Warning:** Message matching uses substring `in` checks, not exact equality. The filter `"not found"` will also match `"resource not found in namespace"`.
 
+## Filter Exceptions with Callables
+
+Use callable filters to retry based on exception attributes instead of message text. The callable receives the exception instance and should return a truthy value to ignore (retry).
+
+```python
+from timeout_sampler import TimeoutSampler
+
+class HttpError(Exception):
+    def __init__(self, status: int, message: str) -> None:
+        self.status = status
+        super().__init__(message)
+
+def make_request():
+    # ... HTTP call that may raise HttpError ...
+    return True
+
+# Only retry on HTTP 5xx errors; 4xx errors raise immediately.
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    exceptions_dict={HttpError: [lambda exc: exc.status >= 500]},
+):
+    if sample:
+        break
+```
+
+Callable filters are useful when the exception carries structured data (status codes, error categories, retry hints) that cannot be matched with simple substring checks.
+
+> **Tip:** Callable and string filters can be combined in the same list. The exception is ignored if **any** filter matches.
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    exceptions_dict={HttpError: ["connection refused", lambda exc: exc.status >= 500]},
+):
+    if sample:
+        break
+```
+
+This retries on any `HttpError` whose message contains `"connection refused"` **or** whose `status` attribute is 500 or above.
+
 ## Combine Multiple Exception Filters
 
 Handle several exception types, each with independent message filters.
@@ -1585,6 +1888,42 @@ Setting `print_log=False` suppresses elapsed-time messages, and `print_func_log=
 
 See [Controlling Log Output](controlling-logging.html) for fine-grained logging options including `print_func_args`.
 
+## Redact Sensitive Data from Logs
+
+Sensitive kwargs such as `Authorization`, `token`, `password`, and `api_key` are automatically redacted from log output.
+
+```python
+from timeout_sampler import TimeoutSampler
+
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    headers={"Authorization": "Bearer my-secret-token"},
+):
+    if sample:
+        break
+# Log output will show: Kwargs: {'headers': {'Authorization': '***'}}
+```
+
+The default sensitive keys are: `authorization`, `token`, `access_token`, `password`, `secret`, `api_key`, and `apikey`. Matching is case-insensitive and exact (e.g., `"token"` matches a key named `Token` but not `nextPageToken`).
+
+To add custom sensitive keys, pass `sensitive_keys` — they are merged with the defaults:
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=call_api,
+    sensitive_keys=frozenset({"x-custom-secret"}),
+    headers={"Authorization": "Bearer token", "x-custom-secret": "value"}, # pragma: allowlist secret
+):
+    if sample:
+        break
+```
+
+> **Note:** Redaction applies recursively to nested dicts, lists, and tuples in kwargs. The `sensitive_keys` parameter is also available on the `@retry` decorator.
+
 ## Track Remaining Time Across Multiple Polling Steps
 
 Use `TimeoutWatch` to share a single time budget across sequential polling operations.
@@ -1652,10 +1991,10 @@ See [TimeoutExpiredError Reference](api-exceptions.html) for all available attri
 ## Related Pages
 
 - [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
-- [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
 - [Filtering and Handling Exceptions](handling-exceptions.html)
+- [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
 - [Tracking Elapsed Time with TimeoutWatch](tracking-elapsed-time.html)
-- [How Exception Matching Works](exception-matching-logic.html)
+- [Redacting Sensitive Data from Log Output](sensitive-key-redaction.html)
 
 ---
 
@@ -1676,10 +2015,11 @@ TimeoutSampler(
     wait_timeout: float,
     sleep: int,
     func: Callable,
-    exceptions_dict: dict[type[Exception], list[str]] | None = None,
+    exceptions_dict: ExceptionsDict | None = None,
     print_log: bool = True,
     print_func_log: bool = True,
     print_func_args: bool = True,
+    sensitive_keys: frozenset[str] | set[str] | None = None,
     func_args: tuple[Any] | None = None,
     **func_kwargs: Any,
 )
@@ -1692,14 +2032,18 @@ TimeoutSampler(
 | `wait_timeout` | `float` | *(required)* | Maximum time in seconds to poll `func` before raising `TimeoutExpiredError`. |
 | `sleep` | `int` | *(required)* | Time in seconds to sleep between successive calls to `func`. |
 | `func` | `Callable` | *(required)* | The function to poll. Called as `func(*func_args, **func_kwargs)` on each iteration. |
-| `exceptions_dict` | `dict[type[Exception], list[str]] \| None` | `None` | Map of exception types to message-filter lists. When `None`, defaults to `{Exception: []}` (all exceptions ignored). See [How Exception Matching Works](exception-matching-logic.html). |
+| `exceptions_dict` | `ExceptionsDict \| None` | `None` | Map of exception types to filter lists. Filters can be strings (matched as substrings of `str(exception)`) or callables (invoked with the exception instance, returning truthy to ignore). When `None`, defaults to `{Exception: []}` (all exceptions ignored). See [How Exception Matching Works](exception-matching-logic.html). |
 | `print_log` | `bool` | `True` | Log elapsed time on each iteration and print a summary line at the start. |
 | `print_func_log` | `bool` | `True` | Include function module and name in the startup log message. |
 | `print_func_args` | `bool` | `True` | Include `func_args` and `func_kwargs` in the log when `print_func_log` is `True`. |
+| `sensitive_keys` | `frozenset[str] \| set[str] \| None` | `None` | Additional keys to redact from logged kwargs (case-insensitive exact match). Merged with the built-in default sensitive keys. See [Sensitive Key Redaction](#sensitive-key-redaction). |
 | `func_args` | `tuple[Any] \| None` | `None` | Positional arguments forwarded to `func`. Stored as an empty tuple when `None`. |
 | `**func_kwargs` | `Any` | — | Keyword arguments forwarded to `func`. |
 
 > **Note:** When `exceptions_dict` is omitted (or `None`), it defaults to `{Exception: []}`, which silently ignores **all** exceptions raised inside `func` until the timeout expires. Pass an explicit empty dict `{}` to re-raise every exception immediately.
+
+
+> **Note:** The `exceptions_dict` is validated at construction time. Keys must be `Exception` subclasses, values must be lists, and filter items must be non-empty strings or callables. Passing invalid types (e.g., a class instead of a callable, or an empty string) raises `TypeError` immediately.
 
 ### Example — Basic Construction
 
@@ -1795,10 +2139,12 @@ For a detailed walkthrough of the matching algorithm, see [How Exception Matchin
 
 ```python
 {
-    ExceptionClass: [message_substring_1, message_substring_2, ...],
+    ExceptionClass: ["message_substring", lambda exc: exc.attr > 0, ...],
     AnotherException: [],   # empty list = match all messages
 }
 ```
+
+Filter items can be **strings** (matched as substrings of `str(exception)`) or **callables** (invoked with the exception instance, returning a truthy value to ignore/retry). Both types can be combined in the same list.
 
 | `exceptions_dict` value | Behavior |
 |---|---|
@@ -1806,16 +2152,21 @@ For a detailed walkthrough of the matching algorithm, see [How Exception Matchin
 | `{}` (empty dict) | Every exception is immediately re-raised as `TimeoutExpiredError`. |
 | `{ValueError: []}` | Any `ValueError` (or subclass) is ignored regardless of message text. |
 | `{ValueError: ["connection"]}` | `ValueError` is ignored only if `"connection"` appears in `str(exp)`. |
-| `{KeyError: ["x"], IndexError: ["y"]}` | Multiple exception types, each with independent message filters. |
+| `{HttpError: [lambda exc: exc.status >= 500]}` | `HttpError` is ignored only if the callable returns truthy. |
+| `{HttpError: ["connection refused", lambda exc: exc.status >= 500]}` | `HttpError` is ignored if **either** the string matches **or** the callable returns truthy. |
+| `{KeyError: ["x"], IndexError: ["y"]}` | Multiple exception types, each with independent filters. |
 
 > **Tip:** The match uses `isinstance()`, so a parent class in `exceptions_dict` will also catch child classes. See [How Exception Matching Works](exception-matching-logic.html) for inheritance examples.
+
+
+> **Warning:** If a callable filter raises an exception itself (e.g., accessing a missing attribute), it is logged as a warning and treated as non-matching — it will **not** propagate.
 
 ### Exception Handling Outcomes
 
 | Scenario | Result |
 |---|---|
-| Exception class (or parent) is in `exceptions_dict` and message matches (or filter list is empty) | Exception is **ignored**; sampler sleeps and retries. |
-| Exception class is in `exceptions_dict` but message does **not** match any filter string | `TimeoutExpiredError` is raised **immediately**. |
+| Exception class (or parent) is in `exceptions_dict` and a filter matches (string substring, callable returns truthy, or filter list is empty) | Exception is **ignored**; sampler sleeps and retries. |
+| Exception class is in `exceptions_dict` but **no** filter matches | `TimeoutExpiredError` is raised **immediately**. |
 | Exception class is **not** in `exceptions_dict` (and no parent class is listed) | `TimeoutExpiredError` is raised **immediately**. |
 | No exception; timeout expires | `TimeoutExpiredError` is raised after the loop ends. |
 
@@ -1851,27 +2202,70 @@ for sample in TimeoutSampler(
 
 A `ValueError("resource not ready")` is ignored (contains `"not ready"`). A `ValueError("invalid input")` causes an immediate `TimeoutExpiredError`.
 
+### Example — Callable Filter
+
+```python
+from timeout_sampler import TimeoutSampler
+
+# Only retry on HTTP 5xx errors; 4xx errors raise immediately.
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    exceptions_dict={HttpError: [lambda exc: exc.status >= 500]},
+):
+    if sample:
+        break
+```
+
+### Example — Mixed String and Callable Filters
+
+```python
+from timeout_sampler import TimeoutSampler
+
+# Retry if message contains "connection refused" OR status >= 500.
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    exceptions_dict={HttpError: ["connection refused", lambda exc: exc.status >= 500]},
+):
+    if sample:
+        break
+```
+
 ---
 
 ## Internal Methods
 
 These methods are not part of the public API but are documented for contributor reference.
 
+### `_validate_exceptions_dict`
+
+```python
+@staticmethod
+_validate_exceptions_dict(exceptions_dict: ExceptionsDict) -> ExceptionsDict
+```
+
+Validates and returns a defensive copy of `exceptions_dict`. Called during `__init__`.
+
+**Raises:** `TypeError` if keys aren't `Exception` subclasses, values aren't lists, or filter items aren't non-empty strings or callables. Passing a class (e.g., `ValueError`) as a filter item instead of a callable also raises `TypeError`.
+
 ### `_is_exception_matched`
 
 ```python
 @staticmethod
-_is_exception_matched(exp: Exception, exception_messages: list[str]) -> bool
+_is_exception_matched(exp: Exception, exception_filters: list[ExceptionFilter]) -> bool
 ```
 
 | Parameter | Type | Description |
 |---|---|---|
 | `exp` | `Exception` | The exception instance raised by `func`. |
-| `exception_messages` | `list[str]` | List of allowed substrings. Empty list matches everything. |
+| `exception_filters` | `list[ExceptionFilter]` | List of allowed filters — strings (substring match against `str(exp)`) or callables (invoked with `exp`, returning truthy to match). Empty list matches everything. |
 
-**Returns:** `True` if `exception_messages` is empty, or if any non-empty string in the list is a substring of `str(exp)`. `False` otherwise.
+**Returns:** `True` if `exception_filters` is empty, if any string in the list is a substring of `str(exp)`, or if any callable returns a truthy value when called with `exp`. `False` otherwise.
 
-> **Note:** Empty strings in the message list are explicitly skipped — they will not produce a match.
+> **Note:** If a callable filter raises an exception when invoked, a warning is logged and the filter is treated as non-matching.
 
 ### `_should_ignore_exception`
 
@@ -1893,14 +2287,22 @@ _get_func_info(self, _func: Callable, type_: str) -> Any
 
 Resolves function metadata (`__module__`, `__name__`) for regular, `partial`, and `lambda` functions. Used internally to build log messages.
 
-### `_func_log` (property)
+### `_redact`
 
 ```python
-@property
+_redact(self, data: Any, _depth: int = 0) -> Any
+```
+
+Recursively redacts values whose keys exactly match sensitive keys (case-insensitive). Traverses dicts, lists, and tuples up to `_MAX_REDACT_DEPTH` (20) levels. Values for matching keys are replaced with `"***"`.
+
+### `_func_log` (cached property)
+
+```python
+@functools.cached_property
 _func_log(self) -> str
 ```
 
-**Returns:** A formatted string describing the function call, e.g. `"Function: mymodule.my_func Args: (1, 2) Kwargs: {'key': 'val'}"`. Controlled by `print_func_log` and `print_func_args`.
+**Returns:** A formatted string describing the function call, e.g. `"Function: mymodule.my_func Args: (1, 2) Kwargs: {'key': 'val'}"`. Controlled by `print_func_log` and `print_func_args`. Sensitive values in args and kwargs are redacted.
 
 ### `_get_exception_log`
 
@@ -1930,6 +2332,40 @@ See [TimeoutExpiredError Reference](api-exceptions.html) for the full attribute 
 
 ---
 
+## Sensitive Key Redaction
+
+When logging function arguments, `TimeoutSampler` automatically redacts values for keys that match known sensitive names. Matching is **case-insensitive** and **exact** (e.g., `"token"` matches a key named `"Token"` or `"TOKEN"` but **not** `"nextPageToken"`).
+
+### Default Sensitive Keys
+
+`authorization`, `token`, `access_token`, `password`, `secret`, `api_key`, `apikey`
+
+### Adding Custom Keys
+
+Pass the `sensitive_keys` parameter to merge additional keys with the defaults:
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=call_api,
+    sensitive_keys=frozenset({"x-custom-secret"}),
+    headers={"Authorization": "Bearer token", "x-custom-secret": "value"}, # pragma: allowlist secret
+):
+    if sample:
+        break
+# Log output: Kwargs: {'headers': {'Authorization': '***', 'x-custom-secret': '***'}}
+```
+
+Redaction traverses dicts, lists, and tuples recursively up to 20 levels deep. Data nested beyond this limit is replaced with `"<redacted: max depth exceeded>"`.
+
+> **Note:** Passing an empty `frozenset()` as `sensitive_keys` still uses all default sensitive keys. To redact **only** defaults, omit the parameter entirely.
+
+
+> **Warning:** All elements of `sensitive_keys` must be strings. Passing non-string elements (e.g., `int`, `None`) raises `TypeError` at construction time.
+
+---
+
 ## Logging Behavior
 
 Logging is emitted via `simple_logger` at `INFO` level.
@@ -1938,7 +2374,7 @@ Logging is emitted via `simple_logger` at `INFO` level.
 |---|---|---|
 | `print_log` | `True` | Logs a startup message with wait/sleep times and logs elapsed time after each iteration where `func` raises an exception or after yield. |
 | `print_func_log` | `True` | Appends function module and name to the startup log message. Requires `print_log=True`. |
-| `print_func_args` | `True` | Includes `Args` and `Kwargs` in the function log. Requires `print_func_log=True`. |
+| `print_func_args` | `True` | Includes `Args` and `Kwargs` in the function log (with sensitive values redacted). Requires `print_func_log=True`. |
 
 See [Controlling Log Output](controlling-logging.html) for usage examples and sample output.
 
@@ -1952,13 +2388,28 @@ from timeout_sampler import TimeoutSampler
 
 The class is exported from the top-level `timeout_sampler` package (`timeout_sampler/__init__.py`).
 
+---
+
+## Type Aliases
+
+The following public type aliases are used in the `TimeoutSampler` API and are re-exported from the `timeout_sampler` package:
+
+```python
+from timeout_sampler import ExceptionFilter, ExceptionsDict
+```
+
+| Alias | Definition | Description |
+|---|---|---|
+| `ExceptionFilter` | `str \| Callable[[Exception], bool]` | A single filter item — either a substring to match against `str(exception)` or a callable that receives the exception and returns truthy to ignore. |
+| `ExceptionsDict` | `dict[type[Exception], list[ExceptionFilter]]` | Mapping of exception classes to their filter lists. Used as the type for the `exceptions_dict` parameter. |
+
 ## Related Pages
 
 - [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
-- [TimeoutExpiredError Reference](api-exceptions.html)
 - [How Exception Matching Works](exception-matching-logic.html)
+- [TimeoutExpiredError Reference](api-exceptions.html)
 - [Controlling Log Output](controlling-logging.html)
-- [TimeoutWatch API](api-timeout-watch.html)
+- [@retry Decorator API](api-retry-decorator.html)
 
 ---
 
@@ -1980,10 +2431,11 @@ from timeout_sampler import retry
 def retry(
     wait_timeout: int,
     sleep: int,
-    exceptions_dict: dict[type[Exception], list[str]] | None = None,
+    exceptions_dict: dict[type[Exception], list[str | Callable[[Exception], bool]]] | None = None,
     print_log: bool = True,
     print_func_log: bool = True,
     print_func_args: bool = True,
+    sensitive_keys: frozenset[str] | set[str] | None = None,
 ) -> Callable
 ```
 
@@ -1993,10 +2445,11 @@ def retry(
 |---|---|---|---|
 | `wait_timeout` | `int` | *(required)* | Maximum time in seconds to keep retrying the decorated function. |
 | `sleep` | `int` | *(required)* | Time in seconds to wait between each call to the decorated function. |
-| `exceptions_dict` | `dict[type[Exception], list[str]] \| None` | `None` | Exception filter map. When `None`, defaults to `{Exception: []}` (all exceptions ignored). See [How Exception Matching Works](exception-matching-logic.html). |
+| `exceptions_dict` | `dict[type[Exception], list[str \| Callable[[Exception], bool]]] \| None` | `None` | Exception filter map. Values can be substring strings or callables that receive the exception and return truthy to ignore. When `None`, defaults to `{Exception: []}` (all exceptions ignored). See [How Exception Matching Works](exception-matching-logic.html). |
 | `print_log` | `bool` | `True` | When `True`, logs elapsed time and timeout configuration. See [Controlling Log Output](controlling-logging.html). |
 | `print_func_log` | `bool` | `True` | When `True`, includes function module and name in log output. |
 | `print_func_args` | `bool` | `True` | When `True` (and `print_func_log` is also `True`), includes function arguments and keyword arguments in log output. |
+| `sensitive_keys` | `frozenset[str] \| set[str] \| None` | `None` | Additional keys to redact from logged kwargs (case-insensitive exact match). Merged with the built-in default sensitive keys (`authorization`, `token`, `access_token`, `password`, `secret`, `api_key`, `apikey`). |
 
 ## Parameter Mapping to TimeoutSampler
 
@@ -2010,6 +2463,7 @@ Every `@retry` parameter maps directly to a [`TimeoutSampler`](api-timeout-sampl
 | `print_log` | `print_log` |
 | `print_func_log` | `print_func_log` |
 | `print_func_args` | `print_func_args` |
+| `sensitive_keys` | `sensitive_keys` |
 | *(decorated function)* | `func` |
 | *(positional args at call time)* | `func_args` |
 | *(keyword args at call time)* | `**func_kwargs` |
@@ -2081,6 +2535,37 @@ def fetch_data():
 result = fetch_data()
 ```
 
+### Callable Exception Filters
+
+Filter values can be callables that receive the exception instance and return a truthy value to ignore (retry):
+
+```python
+from timeout_sampler import retry
+
+@retry(
+    wait_timeout=60,
+    sleep=1,
+    exceptions_dict={HttpError: [lambda exc: exc.status >= 500]},
+)
+def make_request():
+    return requests.get("http://api.example.com/data").json()
+
+# Only retries on HTTP 5xx errors; 4xx errors propagate immediately.
+result = make_request()
+```
+
+Callable and string filters can be combined in the same list:
+
+```python
+@retry(
+    wait_timeout=60,
+    sleep=1,
+    exceptions_dict={HttpError: ["connection refused", lambda exc: exc.status >= 500]},
+)
+def make_request():
+    return requests.get("http://api.example.com/data").json()
+```
+
 See [Filtering and Handling Exceptions](handling-exceptions.html) for the full exception matching semantics.
 
 ### Suppressing Log Output
@@ -2091,6 +2576,21 @@ from timeout_sampler import retry
 @retry(wait_timeout=5, sleep=1, print_log=False)
 def quiet_check():
     return some_condition()
+```
+
+### Redacting Sensitive Keys
+
+```python
+from timeout_sampler import retry
+
+@retry(wait_timeout=30, sleep=2, sensitive_keys=frozenset({"x-custom-secret"}))
+def call_api(headers):
+    return requests.get("http://api.example.com", headers=headers).json()
+
+# Keys like 'authorization', 'token', 'password' are redacted by default.
+# 'x-custom-secret' is added to the redaction list.
+call_api(headers={"Authorization": "Bearer tok", "x-custom-secret": "val"}) # pragma: allowlist secret
+# Log output shows: {'Authorization': '***', 'x-custom-secret': '***'}
 ```
 
 ### Returning a Non-Boolean Truthy Value
@@ -2128,9 +2628,9 @@ See [TimeoutExpiredError Reference](api-exceptions.html) for all available attri
 
 - [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
 - [TimeoutSampler API](api-timeout-sampler.html)
-- [TimeoutExpiredError Reference](api-exceptions.html)
 - [Filtering and Handling Exceptions](handling-exceptions.html)
-- [How Exception Matching Works](exception-matching-logic.html)
+- [Controlling Log Output](controlling-logging.html)
+- [TimeoutExpiredError Reference](api-exceptions.html)
 
 ---
 
@@ -2479,13 +2979,14 @@ assert "Elapsed time: 29.87" in str(err)
 - [@retry Decorator API](api-retry-decorator.html) — decorator that raises `TimeoutExpiredError` on timeout
 - [Filtering and Handling Exceptions](handling-exceptions.html) — configuring `exceptions_dict` to control which exceptions trigger an immediate `TimeoutExpiredError` vs. being silently retried
 - [How Exception Matching Works](exception-matching-logic.html) — the algorithm that determines whether an exception is matched or causes `TimeoutExpiredError`
+- [Tracking Elapsed Time with TimeoutWatch](tracking-elapsed-time.html) — using `TimeoutWatch` to track elapsed time during polling
 
 ## Related Pages
 
+- [How Exception Matching Works](exception-matching-logic.html)
 - [Filtering and Handling Exceptions](handling-exceptions.html)
 - [TimeoutSampler API](api-timeout-sampler.html)
 - [@retry Decorator API](api-retry-decorator.html)
-- [How Exception Matching Works](exception-matching-logic.html)
 - [Tracking Elapsed Time with TimeoutWatch](tracking-elapsed-time.html)
 
 ---
@@ -2505,7 +3006,7 @@ Every time an exception is raised inside the function passed to `TimeoutSampler`
 | Stage | What It Checks | Outcome |
 |-------|---------------|---------|
 | **1. Type matching** | Is the raised exception an instance of any class listed in `exceptions_dict`? This uses Python's `isinstance()`, so subclass relationships are honored. | If no match → **re-raise immediately** |
-| **2. Message filtering** | Does the exception's string representation contain at least one of the allowed message substrings for the matched class? | If match → **ignore and retry**; if no message match → **re-raise immediately** |
+| **2. Filter matching** | Does the exception pass at least one filter in the matched class's filter list? Filters can be **substring strings** (checked against `str(exception)`) or **callables** (invoked with the exception, returning a truthy value to ignore). | If match → **ignore and retry**; if no filter match → **re-raise immediately** |
 
 If the exception passes both stages, the sampler sleeps and calls the function again. If it fails either stage, the sampler wraps the original exception in a `TimeoutExpiredError` and raises it.
 
@@ -2562,24 +3063,27 @@ exceptions_dict = {ValueError: []}
 
 > **Warning:** If you pass an empty `exceptions_dict` (`{}`), **no exceptions will be matched**, so *every* exception will cause an immediate re-raise. This is different from the default behavior (see below).
 
-## How Message Filtering Works
+## How Filter Matching Works
 
-Each key in `exceptions_dict` maps to a list of allowed message substrings. The message filter runs *after* the type match succeeds:
+Each key in `exceptions_dict` maps to a list of **filters**. A filter can be a **string** (substring match against `str(exception)`) or a **callable** (invoked with the exception instance, returning a truthy value to ignore). The filter list is evaluated *after* the type match succeeds:
 
-| `exception_messages` value | Behavior |
+| Filter list value | Behavior |
 |---|---|
-| `[]` (empty list) | **All messages match.** Any exception of this type is ignored. |
+| `[]` (empty list) | **All exceptions match.** Any exception of this type is ignored. |
 | `["connection refused", "timeout"]` | The exception's `str()` representation must contain at least one of these substrings. |
-| `[""]` (list with empty string) | **Nothing matches.** An empty string is explicitly excluded as a safeguard. |
+| `[lambda exc: exc.status >= 500]` | The callable is invoked with the exception; a truthy return value means the exception is ignored. |
+| `["connection refused", lambda exc: exc.status >= 500]` | **Strings and callables can be combined.** The exception is ignored if *any* filter matches. |
 
-The matching logic is a substring check using Python's `in` operator:
+> **Note:** Empty strings in the filter list are rejected at construction time with a `TypeError`. If you need to match all messages of a given type, use an empty list `[]` instead.
+
+### String Filters
+
+String filters perform a substring check using Python's `in` operator:
 
 ```python
-# Internal logic (simplified):
-any(msg and msg in str(exp) for msg in exception_messages)
+# Internal logic (simplified) for a string filter:
+filter_item in str(exp)
 ```
-
-### Message Filtering Examples
 
 ```python
 from timeout_sampler import TimeoutSampler
@@ -2601,7 +3105,30 @@ exceptions_dict = {ValueError: ["not ready", "still loading"]}
 # ❌ ValueError("Invalid input")          → re-raised
 ```
 
-> **Tip:** Message filters are case-sensitive. `"Refused"` will not match an exception with the message `"connection refused"`. Choose your substrings carefully.
+> **Tip:** String filters are case-sensitive. `"Refused"` will not match an exception with the message `"connection refused"`. Choose your substrings carefully.
+
+### Callable Filters
+
+Callable filters receive the exception instance as their single argument and return a truthy value to indicate the exception should be ignored (retried). This lets you filter based on exception attributes, not just the message string.
+
+```python
+# Only retry HttpError when the status code indicates a server error
+exceptions_dict = {HttpError: [lambda exc: exc.status >= 500]}
+
+# ✅ HttpError(status=503)  → retried (callable returns True)
+# ❌ HttpError(status=404)  → re-raised (callable returns False)
+```
+
+```python
+# Combine a string filter with a callable filter — either can match
+exceptions_dict = {HttpError: ["connection refused", lambda exc: exc.status >= 500]}
+
+# ✅ HttpError("connection refused", status=0)   → retried (string matches)
+# ✅ HttpError("server error", status=502)        → retried (callable matches)
+# ❌ HttpError("not found", status=404)           → re-raised (neither matches)
+```
+
+> **Warning:** If a callable filter raises an exception itself, the error is logged as a warning and the filter is treated as non-matching. The sampler continues evaluating the remaining filters in the list.
 
 ## The Default `exceptions_dict`
 
@@ -2627,8 +3154,9 @@ TimeoutSampler(wait_timeout=10, sleep=1, func=my_func, exceptions_dict={Exceptio
 2. The sampler records `exp` as `last_exp` and calculates `elapsed_time`.
 3. The sampler calls `_should_ignore_exception(exp)`, which iterates over every key in `exceptions_dict`:
    - For each key class, it checks `isinstance(exp, key)`.
-   - On the first type match, it retrieves the message list and calls `_is_exception_matched(exp, messages)`.
-   - If both type and message match → return `True` (ignore the exception).
+   - On a type match, it retrieves the filter list and calls `_is_exception_matched(exp, filters)`.
+   - If both type and filter match → return `True` (ignore the exception).
+   - If the type matches but the filter does not, the sampler **continues** checking subsequent entries in the dict.
 4. **If ignored:** the sampler sleeps for `sleep` seconds, then calls `func` again.
 5. **If not ignored:** the sampler raises `TimeoutExpiredError`, attaching `exp` as `last_exp` and the current `elapsed_time`.
 
@@ -2646,7 +3174,7 @@ exceptions_dict = {
 }
 ```
 
-The first matching class wins. Once a type match is found, only that class's message list is checked. If the message filter fails for that class, the exception is re-raised — the sampler does **not** continue checking other classes in the dict.
+The sampler checks entries in iteration order. For each entry, it tests both `isinstance()` and the filter list together. If a type matches but the filter list does not pass, the sampler **continues** to the next entry in the dict. The exception is only re-raised if *no* entry matches on both type and filters.
 
 > **Warning:** Because `isinstance()` honors inheritance, ordering can matter when your exception classes share a parent-child relationship. If both `AExampleError` and `BExampleError(AExampleError)` are in the dict, the one that appears first during iteration will be checked first. Place more specific (child) classes before more general (parent) classes to ensure the correct message filter is applied.
 
@@ -2681,6 +3209,9 @@ See [TimeoutExpiredError Reference](api-exceptions.html) for the full attribute 
 | Specific type, any message | `{ValueError: []}` | `ValueError("anything")` | Retry |
 | Specific type, filtered message | `{ValueError: ["not ready"]}` | `ValueError("not ready yet")` | Retry |
 | Specific type, wrong message | `{ValueError: ["not ready"]}` | `ValueError("bad input")` | Re-raise immediately |
+| Callable filter match | `{HttpError: [lambda exc: exc.status >= 500]}` | `HttpError(status=503)` | Retry |
+| Callable filter no match | `{HttpError: [lambda exc: exc.status >= 500]}` | `HttpError(status=404)` | Re-raise immediately |
+| Mixed string + callable | `{HttpError: ["refused", lambda exc: exc.status >= 500]}` | `HttpError("refused", status=0)` | Retry (string matches) |
 | Subclass match | `{Exception: []}` | `ValueError()` | Retry (ValueError inherits Exception) |
 | Parent does not match child | `{ValueError: []}` | `Exception()` | Re-raise immediately |
 | Empty dict — catch nothing | `{}` | Any exception | Re-raise immediately |
@@ -2696,9 +3227,520 @@ See [TimeoutExpiredError Reference](api-exceptions.html) for the full attribute 
 ## Related Pages
 
 - [Filtering and Handling Exceptions](handling-exceptions.html)
+- [Using Callable Exception Filters](callable-exception-filters.html)
 - [TimeoutSampler API](api-timeout-sampler.html)
 - [TimeoutExpiredError Reference](api-exceptions.html)
-- [@retry Decorator API](api-retry-decorator.html)
 - [Common Polling Patterns](common-polling-patterns.html)
+
+---
+
+Source: sensitive-key-redaction.md
+
+# Redacting Sensitive Data from Log Output
+
+When polling functions that handle credentials, API keys, or other secrets, you need to ensure those values never leak into your application logs. The `sensitive_keys` parameter lets you control exactly which argument keys are masked in log output from both `TimeoutSampler` and `@retry`.
+
+## Prerequisites
+
+- `timeout-sampler` installed in your project
+- Basic familiarity with `TimeoutSampler` or the `@retry` decorator (see [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html) or [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html))
+
+## Quick Example
+
+```python
+from timeout_sampler import TimeoutSampler
+
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=5,
+    func=call_api,
+    headers={"Authorization": "Bearer my-secret-token", "Content-Type": "application/json"},
+):
+    if sample:
+        break
+```
+
+The log output automatically masks the `Authorization` value:
+
+```
+Kwargs: {'headers': {'Authorization': '***', 'Content-Type': 'application/json'}}
+```
+
+No configuration needed — `Authorization` is one of the built-in sensitive keys.
+
+## Built-in Default Sensitive Keys
+
+The following keys are redacted automatically, with no extra configuration:
+
+| Key              | Common Use                          |
+|------------------|-------------------------------------|
+| `authorization`  | HTTP Authorization headers          |
+| `token`          | OAuth/session tokens                |
+| `access_token`   | OAuth2 access tokens                |
+| `password`       | User/service credentials            |
+| `secret`         | Shared secrets                      |
+| `api_key`        | API keys                            |
+| `apikey`         | API keys (alternate spelling)       |
+
+> **Note:** Matching is **case-insensitive** and uses **exact key name** comparison. A key named `Authorization` or `AUTHORIZATION` will be redacted, but a key like `nextPageToken` or `token_count` will **not** — only a key named exactly `token` (in any case) triggers redaction.
+
+## Adding Custom Sensitive Keys
+
+Pass a `set` or `frozenset` of additional key names to the `sensitive_keys` parameter:
+
+```python
+from timeout_sampler import TimeoutSampler
+
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=call_api,
+    sensitive_keys=frozenset({"x-custom-secret"}),
+    headers={"Authorization": "Bearer token", "x-custom-secret": "value"}, # pragma: allowlist secret
+):
+    if sample:
+        break
+```
+
+The log output redacts both the built-in key and your custom key:
+
+```
+Kwargs: {'headers': {'Authorization': '***', 'x-custom-secret': '***'}}
+```
+
+Custom keys are **merged** with the defaults — you never lose the built-in protection. Custom key matching is also case-insensitive: `"X-My-Token"` will match `x-my-token`, `X-MY-TOKEN`, etc.
+
+### Using `sensitive_keys` with `@retry`
+
+The `@retry` decorator accepts the same parameter:
+
+```python
+from timeout_sampler import retry
+
+@retry(
+    wait_timeout=30,
+    sleep=2,
+    sensitive_keys=frozenset({"x-api-secret", "session_id"}),
+)
+def fetch_data(headers=None, session_id=None):
+    # Both headers containing default sensitive keys AND session_id will be redacted
+    return make_request(headers=headers, session_id=session_id)
+
+fetch_data(
+    headers={"Authorization": "Bearer abc123"},
+    session_id="sess-xyz-999",
+)
+```
+
+See [@retry Decorator API](api-retry-decorator.html) for the full parameter reference.
+
+### Passing an Empty Set
+
+Passing an empty `frozenset` or `set` still preserves all built-in defaults — it does not disable redaction:
+
+```python
+# Built-in keys are still redacted
+sampler = TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=call_api,
+    sensitive_keys=frozenset(),  # defaults still active
+    headers={"Authorization": "Bearer still-redacted"},
+)
+```
+
+## How Recursive Redaction Works
+
+Redaction isn't limited to top-level keyword arguments. It walks through your data **recursively**, masking sensitive keys inside nested structures:
+
+### Nested Dictionaries
+
+```python
+TimeoutSampler(
+    wait_timeout=10,
+    sleep=1,
+    func=process,
+    config={"database": {"password": "hunter2", "host": "db.example.com"}}, # pragma: allowlist secret
+)
+# Logged as: Kwargs: {'config': {'database': {'password': '***', 'host': 'db.example.com'}}}
+```
+
+### Lists Containing Dictionaries
+
+```python
+TimeoutSampler(
+    wait_timeout=10,
+    sleep=1,
+    func=process,
+    args_list=[{"token": "secret-in-list", "id": 42}],
+)
+# Logged as: Kwargs: {'args_list': [{'token': '***', 'id': 42}]}
+```
+
+### Tuples Containing Dictionaries
+
+Tuples are traversed the same way as lists — any dictionary found inside a tuple has its sensitive keys redacted.
+
+### Positional Arguments
+
+Dictionaries passed as positional arguments via `func_args` are also redacted:
+
+```python
+TimeoutSampler(
+    wait_timeout=10,
+    sleep=1,
+    func=send_request,
+    func_args=({"Authorization": "Bearer pos-secret", "safe": "visible"},),
+)
+# Logged as: Args: ({'Authorization': '***', 'safe': 'visible'},)
+```
+
+### Non-String Dictionary Keys
+
+Dictionaries with non-string keys (integers, tuples, etc.) are handled safely. Only string keys are checked for sensitive matches — non-string keys are passed through unchanged:
+
+```python
+TimeoutSampler(
+    wait_timeout=10,
+    sleep=1,
+    func=process,
+    data={1: "int-key-value", "password": "secret123"}, # pragma: allowlist secret
+)
+# Logged as: Kwargs: {'data': {1: 'int-key-value', 'password': '***'}}
+```
+
+## Advanced Usage
+
+### Disabling Argument Logging Entirely
+
+If you prefer to suppress all argument output rather than relying on selective redaction, set `print_func_args=False`:
+
+```python
+TimeoutSampler(
+    wait_timeout=60,
+    sleep=5,
+    func=call_api,
+    print_func_args=False,
+    headers={"Authorization": "Bearer secret"},
+)
+# Log output contains no Args/Kwargs section at all
+```
+
+See [Controlling Log Output](controlling-logging.html) for more logging options.
+
+### Depth Limit for Nested Data
+
+Redaction traverses up to **20 levels** of nesting. Data nested beyond this depth is replaced with a sentinel value instead of being logged:
+
+```
+<redacted: max depth exceeded>
+```
+
+This protects against stack overflows from extremely deep or circular data structures. In practice, 20 levels is far deeper than any typical API payload.
+
+### Type Validation on `sensitive_keys`
+
+The `sensitive_keys` parameter must contain **only strings**. Passing non-string values raises a `TypeError` immediately at construction time:
+
+```python
+# Raises TypeError: sensitive_keys must contain only strings, got int: 123
+TimeoutSampler(
+    wait_timeout=10,
+    sleep=1,
+    func=call_api,
+    sensitive_keys=frozenset({123, "valid_key"}),
+)
+```
+
+> **Tip:** Validate your `sensitive_keys` values early. Errors are raised at `TimeoutSampler` or `@retry` initialization — not when log output is generated — so you'll catch mistakes before any polling begins.
+
+## Troubleshooting
+
+| Problem | Cause | Solution |
+|---------|-------|----------|
+| A key like `nextPageToken` is unexpectedly redacted | Custom `sensitive_keys` contains a key that partially matches | Redaction uses **exact** key name matching (case-insensitive). Check your `sensitive_keys` set for overly broad entries. |
+| Sensitive values still appear in logs | The key name isn't in the default set or your custom set | Add the key to `sensitive_keys`. Only exact key-name matches are redacted. |
+| `TypeError` when constructing the sampler | Non-string value in `sensitive_keys` | Ensure all elements in the set are strings. |
+| `<redacted: max depth exceeded>` appears in logs | Data structure is nested more than 20 levels deep | This is expected safety behavior. Restructure data or disable argument logging with `print_func_args=False`. |
+| No kwargs visible at all in logs | `print_func_args` is set to `False` | Set `print_func_args=True` (the default) to see redacted argument output. |
+
+## Related Pages
+
+- [Controlling Log Output](controlling-logging.html)
+- [TimeoutSampler API](api-timeout-sampler.html)
+- [@retry Decorator API](api-retry-decorator.html)
+- [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
+- [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
+
+---
+
+Source: callable-exception-filters.md
+
+# Using Callable Exception Filters
+
+Filter exceptions during polling based on runtime attributes — like HTTP status codes or error categories — by passing callable filters (lambdas or functions) alongside string filters in your `exceptions_dict`.
+
+## Prerequisites
+
+- `timeout-sampler` installed in your project (see [Getting Started with timeout-sampler](quickstart.html))
+- Basic familiarity with `exceptions_dict` string-based filtering (see [Filtering and Handling Exceptions](handling-exceptions.html))
+
+## Quick Example
+
+Ignore server errors (status ≥ 500) and retry, but immediately stop on client errors:
+
+```python
+from timeout_sampler import TimeoutSampler
+
+for sample in TimeoutSampler(
+    wait_timeout=30,
+    sleep=2,
+    func=call_my_api,
+    exceptions_dict={
+        HttpError: [lambda exc: exc.status >= 500]
+    },
+):
+    if sample:
+        break
+```
+
+If `call_my_api` raises an `HttpError` with `status=502`, the sampler retries. If it raises one with `status=404`, polling stops immediately with a `TimeoutExpiredError`.
+
+## Type Aliases
+
+The library exports two type aliases you can use for type-safe exception filter configuration:
+
+```python
+from timeout_sampler import ExceptionFilter, ExceptionsDict
+```
+
+| Type Alias        | Definition                                        | Purpose                                                   |
+|-------------------|---------------------------------------------------|-----------------------------------------------------------|
+| `ExceptionFilter` | `str \| Callable[[Exception], bool]`              | A single filter: either a substring match or a callable   |
+| `ExceptionsDict`  | `dict[type[Exception], list[ExceptionFilter]]`    | The full mapping passed to `exceptions_dict`              |
+
+Use these to annotate your own helper functions or configuration builders:
+
+```python
+from timeout_sampler import ExceptionsDict
+
+def build_api_filters(retryable_codes: list[int]) -> ExceptionsDict:
+    return {
+        HttpError: [lambda exc: exc.status in retryable_codes]
+    }
+
+filters = build_api_filters([500, 502, 503, 504])
+```
+
+## How Callable Filters Work
+
+1. Your polled function raises an exception.
+2. The sampler checks if the exception's type (or a parent type) is a key in `exceptions_dict`.
+3. If the filter list is **empty** (`[]`), all instances of that exception are ignored and the sampler retries.
+4. If the filter list contains **callables**, each callable is invoked with the exception instance. If any callable returns a **truthy** value, the exception is ignored and the sampler retries.
+5. If no filter matches, polling stops and a `TimeoutExpiredError` is raised.
+
+> **Note:** Filters are evaluated in list order. The sampler stops at the first match — either a string substring match or a callable returning truthy.
+
+## Writing Callable Filters
+
+A callable filter is any function or lambda that:
+
+- Accepts exactly **one argument**: the exception instance
+- Returns a **truthy** value to ignore the exception (retry), or **falsy** to stop
+
+### Lambda filters
+
+The most concise option for simple conditions:
+
+```python
+exceptions_dict = {
+    HttpError: [lambda exc: exc.status >= 500]
+}
+```
+
+### Named functions
+
+Better for complex logic or reusability:
+
+```python
+def is_retryable_error(exc):
+    """Retry on server errors and rate limiting."""
+    return exc.status >= 500 or exc.status == 429
+
+exceptions_dict = {
+    HttpError: [is_retryable_error]
+}
+```
+
+### Filtering on exception attributes
+
+Callable filters shine when you need to inspect attributes beyond the exception message:
+
+```python
+# Retry only on specific error codes
+exceptions_dict = {
+    DatabaseError: [lambda exc: exc.error_code in ("LOCK_TIMEOUT", "DEADLOCK")]
+}
+
+# Retry when a response header says to
+exceptions_dict = {
+    ApiError: [lambda exc: exc.retry_after is not None]
+}
+```
+
+## Combining String and Callable Filters
+
+You can mix string and callable filters in the same list. The sampler checks each filter in order and retries on the **first match**:
+
+```python
+exceptions_dict = {
+    ConnectionError: [
+        "Connection refused",                    # string: match against str(exception)
+        lambda exc: getattr(exc, "errno", 0) == 104,  # callable: check attribute
+    ]
+}
+```
+
+| Filter type | How it matches                                                    |
+|-------------|-------------------------------------------------------------------|
+| String      | Checked as a **substring** of `str(exception)`                    |
+| Callable    | Called with the exception instance; retries if return is **truthy**|
+
+> **Tip:** Put the most common match first in the list to short-circuit evaluation.
+
+## Using Callable Filters with the `@retry` Decorator
+
+Callable filters work identically with the `@retry` decorator:
+
+```python
+from timeout_sampler import retry
+
+@retry(
+    wait_timeout=60,
+    sleep=5,
+    exceptions_dict={
+        HttpError: [lambda exc: exc.status >= 500],
+        ConnectionError: [],
+    },
+)
+def fetch_data(url):
+    return requests.get(url).json()
+```
+
+See [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html) for full decorator usage.
+
+## Advanced Usage
+
+### Multiple exception types with different filters
+
+Map different exception classes to different filter strategies in a single `exceptions_dict`:
+
+```python
+exceptions_dict = {
+    HttpError: [lambda exc: exc.status >= 500],
+    ConnectionError: [],                        # retry all connection errors
+    TimeoutError: ["read timed out"],           # retry only read timeouts
+}
+```
+
+### Callable filters with `functools.partial`
+
+Use `functools.partial` to create reusable parameterized filters:
+
+```python
+from functools import partial
+
+def status_in_range(exc, low, high):
+    return low <= exc.status < high
+
+exceptions_dict = {
+    HttpError: [partial(status_in_range, low=500, high=600)]
+}
+```
+
+### Accessing `last_exp` after timeout
+
+When polling ultimately times out, the `TimeoutExpiredError` carries the last exception on its `last_exp` attribute, so you can inspect which exception caused the final failure:
+
+```python
+try:
+    for sample in TimeoutSampler(
+        wait_timeout=10,
+        sleep=2,
+        func=call_my_api,
+        exceptions_dict={HttpError: [lambda exc: exc.status >= 500]},
+    ):
+        if sample:
+            break
+except TimeoutExpiredError as e:
+    if e.last_exp:
+        print(f"Last error status: {e.last_exp.status}")
+```
+
+See [TimeoutExpiredError Reference](api-exceptions.html) for all available attributes.
+
+## Error Handling When a Callable Filter Raises
+
+If your callable filter itself raises an exception (for example, accessing an attribute that doesn't exist), the sampler handles it **safely**:
+
+- The failing filter is **skipped** and treated as non-matching.
+- A warning is logged: `Callable filter <filter> raised <error> for <ExceptionType>, treating as non-matching`.
+- Evaluation continues with the remaining filters in the list.
+- If no other filter matches, the exception is **not ignored** and a `TimeoutExpiredError` is raised.
+
+```python
+# This filter accesses .status, but the exception might not have that attribute
+exceptions_dict = {
+    Exception: [lambda exc: exc.status >= 500]
+}
+```
+
+If a plain `Exception("something broke")` is raised (no `.status` attribute), the callable filter raises `AttributeError` internally. The sampler logs a warning, skips that filter, and since no filter matched, stops polling immediately.
+
+> **Warning:** The sampler will never propagate an exception raised by a filter callable. It always catches the error, logs it, and moves on. Make sure your filter logic is correct — a broken filter silently becomes a non-match.
+
+## Validation at Initialization
+
+The `exceptions_dict` is validated when you create a `TimeoutSampler` or apply `@retry` — not at polling time. Invalid configurations raise `TypeError` immediately:
+
+| Mistake                              | Error message                                                  |
+|--------------------------------------|----------------------------------------------------------------|
+| Using a class as a filter item       | `contains a class (ClassName) instead of a callable or string` |
+| Using an empty string as a filter    | `contains an empty string`                                     |
+| Using a non-callable, non-string     | `expected str or callable`                                     |
+| Using a non-Exception class as a key | `must be an Exception subclass`                                |
+
+```python
+# ❌ Wrong: passing an exception class as a filter
+exceptions_dict = {HttpError: [ValueError]}
+# TypeError: contains a class (ValueError) instead of a callable or string.
+# Use a lambda (e.g., lambda exc: exc.status >= 500) instead.
+
+# ✅ Right: passing a callable
+exceptions_dict = {HttpError: [lambda exc: isinstance(exc.__cause__, ValueError)]}
+```
+
+> **Tip:** Early validation means you'll catch configuration mistakes in tests, not in production during a retry loop.
+
+## Troubleshooting
+
+**Filter never matches even though it should**
+- Verify the callable receives the correct exception type. Use `type(exc)` in a test filter to confirm.
+- Check that your callable returns a **truthy** value (not `None`). A filter that doesn't explicitly `return True` returns `None`, which is falsy.
+
+**Filter always matches when it shouldn't**
+- Ensure your callable isn't returning a truthy value by accident. For example, `lambda exc: exc.message` returns the message string, which is truthy for any non-empty message.
+
+**"Callable filter raised..." warning in logs**
+- Your filter callable is crashing at runtime. Check for attribute access on exception types that don't have the expected attribute. Use `getattr(exc, "attr", default)` for defensive access.
+
+## Related Pages
+
+- [How Exception Matching Works](exception-matching-logic.html)
+- [Filtering and Handling Exceptions](handling-exceptions.html)
+- [TimeoutSampler API](api-timeout-sampler.html)
+- [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
+- [TimeoutExpiredError Reference](api-exceptions.html)
 
 ---

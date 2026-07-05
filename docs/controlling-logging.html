@@ -143,6 +143,27 @@
                 </ul>
             </div>
 
+            <div class="nav-group">
+                <h3 class="nav-group-title">Guides</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="sensitive-key-redaction.html"
+                           class="nav-link">
+                            Redacting Sensitive Data from Log Output
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="callable-exception-filters.html"
+                           class="nav-link">
+                            Using Callable Exception Filters
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
         </nav>
     </aside>
 
@@ -259,7 +280,7 @@ Elapsed time: 5.002 [0:00:05.002000]
 </code></pre></div>
 
 <h3 id="2-hide-arguments-only">2. Hide arguments only</h3>
-<p>When function arguments contain secrets or are too verbose:</p>
+<p>When function arguments are too verbose:</p>
 <div class="highlight"><pre><span></span><code><span class="n">sampler</span> <span class="o">=</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
     <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
     <span class="n">sleep</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
@@ -276,6 +297,9 @@ Elapsed time: 5.002 [0:00:05.002000]
 </code></pre></div>
 
 <p>The function name and module are still logged, but <code>Args</code> and <code>Kwargs</code> are omitted.</p>
+<blockquote>
+<p><strong>Tip:</strong> If you want to keep argument logging but hide sensitive values like passwords or tokens, use the <code>sensitive_keys</code> parameter instead of disabling arguments entirely. See <a href="#automatic-sensitive-key-redaction">Automatic Sensitive Key Redaction</a> below.</p>
+</blockquote>
 <h3 id="3-hide-function-details-entirely">3. Hide function details entirely</h3>
 <p>When you only care about timing:</p>
 <div class="highlight"><pre><span></span><code><span class="n">sampler</span> <span class="o">=</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
@@ -450,6 +474,47 @@ Elapsed time: 5.002 [0:00:05.002000]
 </code></pre></div>
 
 <p>The log will show the resolved underlying function name rather than <code>functools.partial</code>.</p>
+<h3 id="automatic-sensitive-key-redaction">Automatic Sensitive Key Redaction</h3>
+<p>When <code>print_func_args=True</code> (the default), <code>TimeoutSampler</code> automatically redacts values for common sensitive keyword argument keys before logging. Redacted values appear as <code>"***"</code> in the log output.</p>
+<p>The default sensitive keys are: <code>authorization</code>, <code>token</code>, <code>access_token</code>, <code>password</code>, <code>secret</code>, <code>api_key</code>, and <code>apikey</code>. Matching is <strong>case-insensitive</strong> and <strong>exact</strong> — a key like <code>nextPageToken</code> is <em>not</em> redacted because it doesn't exactly match <code>token</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
+    <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+    <span class="n">sleep</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">func</span><span class="o">=</span><span class="n">make_request</span><span class="p">,</span>
+    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="s2">&quot;Bearer my-secret-token&quot;</span><span class="p">},</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+        <span class="k">break</span>
+<span class="c1"># Log output: Kwargs: {&#39;headers&#39;: {&#39;Authorization&#39;: &#39;***&#39;}}</span>
+</code></pre></div>
+
+<p>Redaction works recursively through nested dicts, lists, and tuples.</p>
+<h4 id="adding-custom-sensitive-keys">Adding custom sensitive keys</h4>
+<p>Pass <code>sensitive_keys</code> to add your own keys. Custom keys are <strong>merged</strong> with the defaults — they don't replace them:</p>
+<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
+    <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+    <span class="n">sleep</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">func</span><span class="o">=</span><span class="n">call_api</span><span class="p">,</span>
+    <span class="n">sensitive_keys</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;x-custom-secret&quot;</span><span class="p">}),</span>
+    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="s2">&quot;Bearer token&quot;</span><span class="p">,</span> <span class="s2">&quot;x-custom-secret&quot;</span><span class="p">:</span> <span class="s2">&quot;value&quot;</span><span class="p">},</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+        <span class="k">break</span>
+<span class="c1"># Both &quot;Authorization&quot; and &quot;x-custom-secret&quot; values are redacted</span>
+</code></pre></div>
+
+<p>The <code>sensitive_keys</code> parameter accepts <code>frozenset[str]</code> or <code>set[str]</code>. Passing an empty <code>frozenset()</code> still uses the default keys.</p>
+<blockquote>
+<p><strong>Warning:</strong> <code>sensitive_keys</code> must contain only strings. Passing non-string elements raises <code>TypeError</code> at construction time.</p>
+</blockquote>
+<p>The <code>sensitive_keys</code> parameter is also available on the <code>@retry</code> decorator:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">retry</span>
+
+<span class="nd">@retry</span><span class="p">(</span><span class="n">wait_timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">sleep</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">sensitive_keys</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;x-api-secret&quot;</span><span class="p">}))</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">fetch_data</span><span class="p">(</span><span class="n">x_api_secret</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;https://api.example.com&quot;</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x-api-secret&quot;</span><span class="p">:</span> <span class="n">x_api_secret</span><span class="p">})</span><span class="o">.</span><span class="n">ok</span>
+</code></pre></div>
+
 <h3 id="selective-logging-in-test-suites">Selective Logging in Test Suites</h3>
 <p>When writing tests, suppress logging to keep test output clean:</p>
 <div class="highlight"><pre><span></span><code><span class="nd">@retry</span><span class="p">(</span><span class="n">wait_timeout</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">sleep</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">print_log</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
@@ -467,6 +532,8 @@ The elapsed-time lines are controlled by <code>print_log</code>, not <code>print
 The <code>print_func_args</code> parameter controls argument visibility in both the log output <em>and</em> the exception message. Verify that <code>print_func_args=False</code> is set on the <code>TimeoutSampler</code> or <code>@retry</code> call that raises the error.</p>
 <p><strong>I want to customize the logger itself</strong>
 <code>timeout-sampler</code> uses <code>python-simple-logger</code> for its logging backend. The log parameters described on this page control <em>what</em> is logged, not <em>where</em> or <em>how</em>. To configure log levels, formats, or destinations, refer to <code>python-simple-logger</code> documentation.</p>
+<p><strong>Sensitive values still appear in logs</strong>
+Redaction only applies to dict keys that exactly match (case-insensitive) a known sensitive key. If your secret is under a non-standard key name, add it via <code>sensitive_keys=frozenset({"my_key"})</code>. Redaction applies to kwargs, positional args containing dicts, and nested structures.</p>
 <h2 id="related-pages">Related Pages</h2>
 <ul>
 <li><a href="api-timeout-sampler.html">TimeoutSampler API</a></li>
@@ -474,6 +541,14 @@ The <code>print_func_args</code> parameter controls argument visibility in both 
 <li><a href="polling-with-timeout-sampler.html">Polling a Function with TimeoutSampler</a></li>
 <li><a href="api-retry-decorator.html">@retry Decorator API</a></li>
 <li><a href="api-exceptions.html">TimeoutExpiredError Reference</a></li>
+</ul>
+<h2 id="related-pages_1">Related Pages</h2>
+<ul>
+<li><a href="sensitive-key-redaction.html">Redacting Sensitive Data from Log Output</a></li>
+<li><a href="api-timeout-sampler.html">TimeoutSampler API</a></li>
+<li><a href="polling-with-timeout-sampler.html">Polling a Function with TimeoutSampler</a></li>
+<li><a href="using-the-retry-decorator.html">Retrying Functions with the @retry Decorator</a></li>
+<li><a href="api-retry-decorator.html">@retry Decorator API</a></li>
 </ul>
                 </div>
             </article>
@@ -512,11 +587,13 @@ The <code>print_func_args</code> parameter controls argument visibility in both 
 <li><a href="#advanced-usage">Advanced Usage</a><ul>
 <li><a href="#logging-in-exception-scenarios">Logging in Exception Scenarios</a></li>
 <li><a href="#logging-with-lambda-and-partial-functions">Logging with Lambda and Partial Functions</a></li>
+<li><a href="#automatic-sensitive-key-redaction">Automatic Sensitive Key Redaction</a></li>
 <li><a href="#selective-logging-in-test-suites">Selective Logging in Test Suites</a></li>
 </ul>
 </li>
 <li><a href="#troubleshooting">Troubleshooting</a></li>
 <li><a href="#related-pages">Related Pages</a></li>
+<li><a href="#related-pages_1">Related Pages</a></li>
 </ul>
 </div>
 
@@ -528,7 +605,7 @@ The <code>print_func_args</code> parameter controls argument visibility in both 
 
         <footer class="page-footer">
 
-            <span class="footer-version">Generated from version 1.0.22</span>
+            <span class="footer-version">Generated from version 1.1.0</span>
             <span class="footer-sep">&middot;</span>
 
             Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>

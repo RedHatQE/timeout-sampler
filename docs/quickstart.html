@@ -143,6 +143,27 @@
                 </ul>
             </div>
 
+            <div class="nav-group">
+                <h3 class="nav-group-title">Guides</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="sensitive-key-redaction.html"
+                           class="nav-link">
+                            Redacting Sensitive Data from Log Output
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="callable-exception-filters.html"
+                           class="nav-link">
+                            Using Callable Exception Filters
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
         </nav>
     </aside>
 
@@ -191,7 +212,7 @@
                          the AI generates the content, not end users. -->
                     <h2 id="prerequisites">Prerequisites</h2>
 <ul>
-<li>Python 3.9 or later</li>
+<li>Python 3.10 or later</li>
 <li><code>pip</code> (or any Python package manager)</li>
 </ul>
 <h2 id="install">Install</h2>
@@ -314,6 +335,8 @@
 <ul>
 <li><code>{ConnectionError: []}</code> — ignore all <code>ConnectionError</code> instances (and subclasses) and keep polling.</li>
 <li><code>{ConnectionError: ["refused"]}</code> — only ignore a <code>ConnectionError</code> whose message contains <code>"refused"</code>; any other <code>ConnectionError</code> re-raises immediately.</li>
+<li><code>{HttpError: [lambda exc: exc.status &gt;= 500]}</code> — use a <strong>callable filter</strong> to retry only when the exception's <code>status</code> attribute is 500 or above; 4xx errors re-raise immediately.</li>
+<li><code>{HttpError: ["connection refused", lambda exc: exc.status &gt;= 500]}</code> — combine string and callable filters in the same list; the exception is ignored if <em>any</em> filter matches.</li>
 <li><code>{}</code> — do <strong>not</strong> ignore any exceptions; every exception re-raises immediately.</li>
 </ul>
 <blockquote>
@@ -358,6 +381,22 @@
         <span class="k">break</span>
 </code></pre></div>
 
+<p>Sensitive keyword arguments such as <code>Authorization</code>, <code>token</code>, <code>password</code>, and <code>api_key</code> are <strong>automatically redacted</strong> from log output. To add your own keys, pass <code>sensitive_keys</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
+    <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+    <span class="n">sleep</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">func</span><span class="o">=</span><span class="n">call_api</span><span class="p">,</span>
+    <span class="n">sensitive_keys</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;x-custom-secret&quot;</span><span class="p">}),</span>
+    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="s2">&quot;Bearer token&quot;</span><span class="p">,</span> <span class="s2">&quot;x-custom-secret&quot;</span><span class="p">:</span> <span class="s2">&quot;value&quot;</span><span class="p">},</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+        <span class="k">break</span>
+<span class="c1"># Log output: Kwargs: {&#39;headers&#39;: {&#39;Authorization&#39;: &#39;***&#39;, &#39;x-custom-secret&#39;: &#39;***&#39;}}</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Tip:</strong> The default sensitive keys are <code>authorization</code>, <code>token</code>, <code>access_token</code>, <code>password</code>, <code>secret</code>, <code>api_key</code>, and <code>apikey</code> (case-insensitive exact match). Custom keys from <code>sensitive_keys</code> are merged with the defaults.</p>
+</blockquote>
 <p>See <a href="controlling-logging.html">Controlling Log Output</a> for details.</p>
 <h3 id="tracking-elapsed-time-independently">Tracking elapsed time independently</h3>
 <p>The <code>TimeoutWatch</code> helper lets you build custom timing logic outside of <code>TimeoutSampler</code>:</p>
@@ -410,9 +449,9 @@
 <ul>
 <li><a href="polling-with-timeout-sampler.html">Polling a Function with TimeoutSampler</a></li>
 <li><a href="using-the-retry-decorator.html">Retrying Functions with the @retry Decorator</a></li>
-<li><a href="handling-exceptions.html">Filtering and Handling Exceptions</a></li>
-<li><a href="common-polling-patterns.html">Common Polling Patterns</a></li>
 <li><a href="api-timeout-sampler.html">TimeoutSampler API</a></li>
+<li><a href="common-polling-patterns.html">Common Polling Patterns</a></li>
+<li><a href="handling-exceptions.html">Filtering and Handling Exceptions</a></li>
 </ul>
                 </div>
             </article>
@@ -464,7 +503,7 @@
 
         <footer class="page-footer">
 
-            <span class="footer-version">Generated from version 1.0.22</span>
+            <span class="footer-version">Generated from version 1.1.0</span>
             <span class="footer-sep">&middot;</span>
 
             Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>

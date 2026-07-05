@@ -143,6 +143,27 @@
                 </ul>
             </div>
 
+            <div class="nav-group">
+                <h3 class="nav-group-title">Guides</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="sensitive-key-redaction.html"
+                           class="nav-link">
+                            Redacting Sensitive Data from Log Output
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="callable-exception-filters.html"
+                           class="nav-link">
+                            Using Callable Exception Filters
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
         </nav>
     </aside>
 
@@ -328,6 +349,45 @@
 <blockquote>
 <p><strong>Warning:</strong> Message matching uses substring <code>in</code> checks, not exact equality. The filter <code>"not found"</code> will also match <code>"resource not found in namespace"</code>.</p>
 </blockquote>
+<h2 id="filter-exceptions-with-callables">Filter Exceptions with Callables</h2>
+<p>Use callable filters to retry based on exception attributes instead of message text. The callable receives the exception instance and should return a truthy value to ignore (retry).</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeoutSampler</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">HttpError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">status</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="n">status</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">make_request</span><span class="p">():</span>
+    <span class="c1"># ... HTTP call that may raise HttpError ...</span>
+    <span class="k">return</span> <span class="kc">True</span>
+
+<span class="c1"># Only retry on HTTP 5xx errors; 4xx errors raise immediately.</span>
+<span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
+    <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+    <span class="n">sleep</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">func</span><span class="o">=</span><span class="n">make_request</span><span class="p">,</span>
+    <span class="n">exceptions_dict</span><span class="o">=</span><span class="p">{</span><span class="n">HttpError</span><span class="p">:</span> <span class="p">[</span><span class="k">lambda</span> <span class="n">exc</span><span class="p">:</span> <span class="n">exc</span><span class="o">.</span><span class="n">status</span> <span class="o">&gt;=</span> <span class="mi">500</span><span class="p">]},</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+        <span class="k">break</span>
+</code></pre></div>
+
+<p>Callable filters are useful when the exception carries structured data (status codes, error categories, retry hints) that cannot be matched with simple substring checks.</p>
+<blockquote>
+<p><strong>Tip:</strong> Callable and string filters can be combined in the same list. The exception is ignored if <strong>any</strong> filter matches.</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
+    <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+    <span class="n">sleep</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">func</span><span class="o">=</span><span class="n">make_request</span><span class="p">,</span>
+    <span class="n">exceptions_dict</span><span class="o">=</span><span class="p">{</span><span class="n">HttpError</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;connection refused&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">exc</span><span class="p">:</span> <span class="n">exc</span><span class="o">.</span><span class="n">status</span> <span class="o">&gt;=</span> <span class="mi">500</span><span class="p">]},</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+        <span class="k">break</span>
+</code></pre></div>
+
+<p>This retries on any <code>HttpError</code> whose message contains <code>"connection refused"</code> <strong>or</strong> whose <code>status</code> attribute is 500 or above.</p>
 <h2 id="combine-multiple-exception-filters">Combine Multiple Exception Filters</h2>
 <p>Handle several exception types, each with independent message filters.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeoutSampler</span>
@@ -425,6 +485,37 @@
 
 <p>Setting <code>print_log=False</code> suppresses elapsed-time messages, and <code>print_func_log=False</code> suppresses function call details. Use both together for completely silent polling.</p>
 <p>See <a href="controlling-logging.html">Controlling Log Output</a> for fine-grained logging options including <code>print_func_args</code>.</p>
+<h2 id="redact-sensitive-data-from-logs">Redact Sensitive Data from Logs</h2>
+<p>Sensitive kwargs such as <code>Authorization</code>, <code>token</code>, <code>password</code>, and <code>api_key</code> are automatically redacted from log output.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeoutSampler</span>
+
+<span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
+    <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+    <span class="n">sleep</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">func</span><span class="o">=</span><span class="n">make_request</span><span class="p">,</span>
+    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="s2">&quot;Bearer my-secret-token&quot;</span><span class="p">},</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+        <span class="k">break</span>
+<span class="c1"># Log output will show: Kwargs: {&#39;headers&#39;: {&#39;Authorization&#39;: &#39;***&#39;}}</span>
+</code></pre></div>
+
+<p>The default sensitive keys are: <code>authorization</code>, <code>token</code>, <code>access_token</code>, <code>password</code>, <code>secret</code>, <code>api_key</code>, and <code>apikey</code>. Matching is case-insensitive and exact (e.g., <code>"token"</code> matches a key named <code>Token</code> but not <code>nextPageToken</code>).</p>
+<p>To add custom sensitive keys, pass <code>sensitive_keys</code> — they are merged with the defaults:</p>
+<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
+    <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+    <span class="n">sleep</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">func</span><span class="o">=</span><span class="n">call_api</span><span class="p">,</span>
+    <span class="n">sensitive_keys</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;x-custom-secret&quot;</span><span class="p">}),</span>
+    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="s2">&quot;Bearer token&quot;</span><span class="p">,</span> <span class="s2">&quot;x-custom-secret&quot;</span><span class="p">:</span> <span class="s2">&quot;value&quot;</span><span class="p">},</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+        <span class="k">break</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Note:</strong> Redaction applies recursively to nested dicts, lists, and tuples in kwargs. The <code>sensitive_keys</code> parameter is also available on the <code>@retry</code> decorator.</p>
+</blockquote>
 <h2 id="track-remaining-time-across-multiple-polling-steps">Track Remaining Time Across Multiple Polling Steps</h2>
 <p>Use <code>TimeoutWatch</code> to share a single time budget across sequential polling operations.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeoutSampler</span><span class="p">,</span> <span class="n">TimeoutWatch</span>
@@ -482,10 +573,10 @@
 <h2 id="related-pages">Related Pages</h2>
 <ul>
 <li><a href="polling-with-timeout-sampler.html">Polling a Function with TimeoutSampler</a></li>
-<li><a href="using-the-retry-decorator.html">Retrying Functions with the @retry Decorator</a></li>
 <li><a href="handling-exceptions.html">Filtering and Handling Exceptions</a></li>
+<li><a href="using-the-retry-decorator.html">Retrying Functions with the @retry Decorator</a></li>
 <li><a href="tracking-elapsed-time.html">Tracking Elapsed Time with TimeoutWatch</a></li>
-<li><a href="exception-matching-logic.html">How Exception Matching Works</a></li>
+<li><a href="sensitive-key-redaction.html">Redacting Sensitive Data from Log Output</a></li>
 </ul>
                 </div>
             </article>
@@ -515,10 +606,12 @@
 <li><a href="#pass-arguments-via-func_args-and-keyword-arguments">Pass Arguments via func_args and Keyword Arguments</a></li>
 <li><a href="#ignore-all-instances-of-an-exception">Ignore All Instances of an Exception</a></li>
 <li><a href="#filter-exceptions-by-message-text">Filter Exceptions by Message Text</a></li>
+<li><a href="#filter-exceptions-with-callables">Filter Exceptions with Callables</a></li>
 <li><a href="#combine-multiple-exception-filters">Combine Multiple Exception Filters</a></li>
 <li><a href="#leverage-exception-inheritance-for-broad-matching">Leverage Exception Inheritance for Broad Matching</a></li>
 <li><a href="#wait-for-a-return-value-to-match-a-condition">Wait for a Return Value to Match a Condition</a></li>
 <li><a href="#silence-all-log-output">Silence All Log Output</a></li>
+<li><a href="#redact-sensitive-data-from-logs">Redact Sensitive Data from Logs</a></li>
 <li><a href="#track-remaining-time-across-multiple-polling-steps">Track Remaining Time Across Multiple Polling Steps</a></li>
 <li><a href="#catch-timeoutexpirederror-and-inspect-the-last-exception">Catch TimeoutExpiredError and Inspect the Last Exception</a></li>
 <li><a href="#related-pages">Related Pages</a></li>
@@ -533,7 +626,7 @@
 
         <footer class="page-footer">
 
-            <span class="footer-version">Generated from version 1.0.22</span>
+            <span class="footer-version">Generated from version 1.1.0</span>
             <span class="footer-sep">&middot;</span>
 
             Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>

@@ -119,6 +119,7 @@ for sample in TimeoutSampler(
 
 - An empty list `[]` means "ignore this exception regardless of its message."
 - A list of strings matches against the exception message text — only matching messages are ignored.
+- A list can also contain **callables** that receive the exception instance and return a truthy value to ignore (retry).
 
 ```python
 exceptions_dict = {
@@ -127,7 +128,34 @@ exceptions_dict = {
 }
 ```
 
-Any exception **not** listed (or listed but with a non-matching message) is immediately re-raised as a `TimeoutExpiredError`.
+Use callable filters to retry based on exception attributes:
+
+```python
+# Only retry on HTTP 5xx errors; 4xx errors raise immediately.
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    exceptions_dict={HttpError: [lambda exc: exc.status >= 500]},
+):
+    if sample:
+        break
+```
+
+Callable and string filters can be combined in the same list:
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    exceptions_dict={HttpError: ["connection refused", lambda exc: exc.status >= 500]},
+):
+    if sample:
+        break
+```
+
+Any exception **not** listed (or listed but with a non-matching message/callable) is immediately re-raised as a `TimeoutExpiredError`.
 
 For full details on exception filtering, see [Filtering and Handling Exceptions](handling-exceptions.html) and [How Exception Matching Works](exception-matching-logic.html).
 
@@ -152,6 +180,38 @@ for sample in TimeoutSampler(
     if sample:
         break
 ```
+
+#### Redacting Sensitive Data from Logs
+
+Sensitive keyword argument values (such as `Authorization`, `token`, `password`, `secret`, `api_key`, and `apikey`) are automatically redacted from log output:
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    headers={"Authorization": "Bearer my-secret-token"},
+):
+    if sample:
+        break
+# Log output will show: Kwargs: {'headers': {'Authorization': '***'}}
+```
+
+To add custom sensitive keys (merged with the defaults), use the `sensitive_keys` parameter:
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=call_api,
+    sensitive_keys=frozenset({"x-custom-secret"}),
+    headers={"Authorization": "Bearer token", "x-custom-secret": "value"}, # pragma: allowlist secret
+):
+    if sample:
+        break
+```
+
+> **Note:** Key matching is case-insensitive and uses exact match — a key named `"token"` is redacted, but `"nextPageToken"` is not.
 
 See [Controlling Log Output](controlling-logging.html) for more on logging behavior.
 
@@ -205,4 +265,4 @@ Make sure your break condition actually matches the return value. Yielded sample
 - [TimeoutSampler API](api-timeout-sampler.html)
 - [Filtering and Handling Exceptions](handling-exceptions.html)
 - [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
-- [Common Polling Patterns](common-polling-patterns.html)
+- [Controlling Log Output](controlling-logging.html)

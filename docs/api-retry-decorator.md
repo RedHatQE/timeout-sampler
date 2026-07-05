@@ -14,10 +14,11 @@ from timeout_sampler import retry
 def retry(
     wait_timeout: int,
     sleep: int,
-    exceptions_dict: dict[type[Exception], list[str]] | None = None,
+    exceptions_dict: dict[type[Exception], list[str | Callable[[Exception], bool]]] | None = None,
     print_log: bool = True,
     print_func_log: bool = True,
     print_func_args: bool = True,
+    sensitive_keys: frozenset[str] | set[str] | None = None,
 ) -> Callable
 ```
 
@@ -27,10 +28,11 @@ def retry(
 |---|---|---|---|
 | `wait_timeout` | `int` | *(required)* | Maximum time in seconds to keep retrying the decorated function. |
 | `sleep` | `int` | *(required)* | Time in seconds to wait between each call to the decorated function. |
-| `exceptions_dict` | `dict[type[Exception], list[str]] \| None` | `None` | Exception filter map. When `None`, defaults to `{Exception: []}` (all exceptions ignored). See [How Exception Matching Works](exception-matching-logic.html). |
+| `exceptions_dict` | `dict[type[Exception], list[str \| Callable[[Exception], bool]]] \| None` | `None` | Exception filter map. Values can be substring strings or callables that receive the exception and return truthy to ignore. When `None`, defaults to `{Exception: []}` (all exceptions ignored). See [How Exception Matching Works](exception-matching-logic.html). |
 | `print_log` | `bool` | `True` | When `True`, logs elapsed time and timeout configuration. See [Controlling Log Output](controlling-logging.html). |
 | `print_func_log` | `bool` | `True` | When `True`, includes function module and name in log output. |
 | `print_func_args` | `bool` | `True` | When `True` (and `print_func_log` is also `True`), includes function arguments and keyword arguments in log output. |
+| `sensitive_keys` | `frozenset[str] \| set[str] \| None` | `None` | Additional keys to redact from logged kwargs (case-insensitive exact match). Merged with the built-in default sensitive keys (`authorization`, `token`, `access_token`, `password`, `secret`, `api_key`, `apikey`). |
 
 ## Parameter Mapping to TimeoutSampler
 
@@ -44,6 +46,7 @@ Every `@retry` parameter maps directly to a [`TimeoutSampler`](api-timeout-sampl
 | `print_log` | `print_log` |
 | `print_func_log` | `print_func_log` |
 | `print_func_args` | `print_func_args` |
+| `sensitive_keys` | `sensitive_keys` |
 | *(decorated function)* | `func` |
 | *(positional args at call time)* | `func_args` |
 | *(keyword args at call time)* | `**func_kwargs` |
@@ -115,6 +118,37 @@ def fetch_data():
 result = fetch_data()
 ```
 
+### Callable Exception Filters
+
+Filter values can be callables that receive the exception instance and return a truthy value to ignore (retry):
+
+```python
+from timeout_sampler import retry
+
+@retry(
+    wait_timeout=60,
+    sleep=1,
+    exceptions_dict={HttpError: [lambda exc: exc.status >= 500]},
+)
+def make_request():
+    return requests.get("http://api.example.com/data").json()
+
+# Only retries on HTTP 5xx errors; 4xx errors propagate immediately.
+result = make_request()
+```
+
+Callable and string filters can be combined in the same list:
+
+```python
+@retry(
+    wait_timeout=60,
+    sleep=1,
+    exceptions_dict={HttpError: ["connection refused", lambda exc: exc.status >= 500]},
+)
+def make_request():
+    return requests.get("http://api.example.com/data").json()
+```
+
 See [Filtering and Handling Exceptions](handling-exceptions.html) for the full exception matching semantics.
 
 ### Suppressing Log Output
@@ -125,6 +159,21 @@ from timeout_sampler import retry
 @retry(wait_timeout=5, sleep=1, print_log=False)
 def quiet_check():
     return some_condition()
+```
+
+### Redacting Sensitive Keys
+
+```python
+from timeout_sampler import retry
+
+@retry(wait_timeout=30, sleep=2, sensitive_keys=frozenset({"x-custom-secret"}))
+def call_api(headers):
+    return requests.get("http://api.example.com", headers=headers).json()
+
+# Keys like 'authorization', 'token', 'password' are redacted by default.
+# 'x-custom-secret' is added to the redaction list.
+call_api(headers={"Authorization": "Bearer tok", "x-custom-secret": "val"}) # pragma: allowlist secret
+# Log output shows: {'Authorization': '***', 'x-custom-secret': '***'}
 ```
 
 ### Returning a Non-Boolean Truthy Value
@@ -162,6 +211,6 @@ See [TimeoutExpiredError Reference](api-exceptions.html) for all available attri
 
 - [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
 - [TimeoutSampler API](api-timeout-sampler.html)
-- [TimeoutExpiredError Reference](api-exceptions.html)
 - [Filtering and Handling Exceptions](handling-exceptions.html)
-- [How Exception Matching Works](exception-matching-logic.html)
+- [Controlling Log Output](controlling-logging.html)
+- [TimeoutExpiredError Reference](api-exceptions.html)

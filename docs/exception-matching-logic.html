@@ -143,6 +143,27 @@
                 </ul>
             </div>
 
+            <div class="nav-group">
+                <h3 class="nav-group-title">Guides</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="sensitive-key-redaction.html"
+                           class="nav-link">
+                            Redacting Sensitive Data from Log Output
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="callable-exception-filters.html"
+                           class="nav-link">
+                            Using Callable Exception Filters
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
         </nav>
     </aside>
 
@@ -209,9 +230,9 @@
 <td>If no match → <strong>re-raise immediately</strong></td>
 </tr>
 <tr>
-<td><strong>2. Message filtering</strong></td>
-<td>Does the exception's string representation contain at least one of the allowed message substrings for the matched class?</td>
-<td>If match → <strong>ignore and retry</strong>; if no message match → <strong>re-raise immediately</strong></td>
+<td><strong>2. Filter matching</strong></td>
+<td>Does the exception pass at least one filter in the matched class's filter list? Filters can be <strong>substring strings</strong> (checked against <code>str(exception)</code>) or <strong>callables</strong> (invoked with the exception, returning a truthy value to ignore).</td>
+<td>If match → <strong>ignore and retry</strong>; if no filter match → <strong>re-raise immediately</strong></td>
 </tr>
 </tbody>
 </table>
@@ -259,36 +280,43 @@
 <blockquote>
 <p><strong>Warning:</strong> If you pass an empty <code>exceptions_dict</code> (<code>{}</code>), <strong>no exceptions will be matched</strong>, so <em>every</em> exception will cause an immediate re-raise. This is different from the default behavior (see below).</p>
 </blockquote>
-<h2 id="how-message-filtering-works">How Message Filtering Works</h2>
-<p>Each key in <code>exceptions_dict</code> maps to a list of allowed message substrings. The message filter runs <em>after</em> the type match succeeds:</p>
+<h2 id="how-filter-matching-works">How Filter Matching Works</h2>
+<p>Each key in <code>exceptions_dict</code> maps to a list of <strong>filters</strong>. A filter can be a <strong>string</strong> (substring match against <code>str(exception)</code>) or a <strong>callable</strong> (invoked with the exception instance, returning a truthy value to ignore). The filter list is evaluated <em>after</em> the type match succeeds:</p>
 <table>
 <thead>
 <tr>
-<th><code>exception_messages</code> value</th>
+<th>Filter list value</th>
 <th>Behavior</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>[]</code> (empty list)</td>
-<td><strong>All messages match.</strong> Any exception of this type is ignored.</td>
+<td><strong>All exceptions match.</strong> Any exception of this type is ignored.</td>
 </tr>
 <tr>
 <td><code>["connection refused", "timeout"]</code></td>
 <td>The exception's <code>str()</code> representation must contain at least one of these substrings.</td>
 </tr>
 <tr>
-<td><code>[""]</code> (list with empty string)</td>
-<td><strong>Nothing matches.</strong> An empty string is explicitly excluded as a safeguard.</td>
+<td><code>[lambda exc: exc.status &gt;= 500]</code></td>
+<td>The callable is invoked with the exception; a truthy return value means the exception is ignored.</td>
+</tr>
+<tr>
+<td><code>["connection refused", lambda exc: exc.status &gt;= 500]</code></td>
+<td><strong>Strings and callables can be combined.</strong> The exception is ignored if <em>any</em> filter matches.</td>
 </tr>
 </tbody>
 </table>
-<p>The matching logic is a substring check using Python's <code>in</code> operator:</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># Internal logic (simplified):</span>
-<span class="nb">any</span><span class="p">(</span><span class="n">msg</span> <span class="ow">and</span> <span class="n">msg</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">exp</span><span class="p">)</span> <span class="k">for</span> <span class="n">msg</span> <span class="ow">in</span> <span class="n">exception_messages</span><span class="p">)</span>
+<blockquote>
+<p><strong>Note:</strong> Empty strings in the filter list are rejected at construction time with a <code>TypeError</code>. If you need to match all messages of a given type, use an empty list <code>[]</code> instead.</p>
+</blockquote>
+<h3 id="string-filters">String Filters</h3>
+<p>String filters perform a substring check using Python's <code>in</code> operator:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Internal logic (simplified) for a string filter:</span>
+<span class="n">filter_item</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">exp</span><span class="p">)</span>
 </code></pre></div>
 
-<h3 id="message-filtering-examples">Message Filtering Examples</h3>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeoutSampler</span>
 
 <span class="c1"># Match only ConnectionError with &quot;refused&quot; in the message</span>
@@ -308,7 +336,27 @@
 </code></pre></div>
 
 <blockquote>
-<p><strong>Tip:</strong> Message filters are case-sensitive. <code>"Refused"</code> will not match an exception with the message <code>"connection refused"</code>. Choose your substrings carefully.</p>
+<p><strong>Tip:</strong> String filters are case-sensitive. <code>"Refused"</code> will not match an exception with the message <code>"connection refused"</code>. Choose your substrings carefully.</p>
+</blockquote>
+<h3 id="callable-filters">Callable Filters</h3>
+<p>Callable filters receive the exception instance as their single argument and return a truthy value to indicate the exception should be ignored (retried). This lets you filter based on exception attributes, not just the message string.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Only retry HttpError when the status code indicates a server error</span>
+<span class="n">exceptions_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">HttpError</span><span class="p">:</span> <span class="p">[</span><span class="k">lambda</span> <span class="n">exc</span><span class="p">:</span> <span class="n">exc</span><span class="o">.</span><span class="n">status</span> <span class="o">&gt;=</span> <span class="mi">500</span><span class="p">]}</span>
+
+<span class="c1"># ✅ HttpError(status=503)  → retried (callable returns True)</span>
+<span class="c1"># ❌ HttpError(status=404)  → re-raised (callable returns False)</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code><span class="c1"># Combine a string filter with a callable filter — either can match</span>
+<span class="n">exceptions_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">HttpError</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;connection refused&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">exc</span><span class="p">:</span> <span class="n">exc</span><span class="o">.</span><span class="n">status</span> <span class="o">&gt;=</span> <span class="mi">500</span><span class="p">]}</span>
+
+<span class="c1"># ✅ HttpError(&quot;connection refused&quot;, status=0)   → retried (string matches)</span>
+<span class="c1"># ✅ HttpError(&quot;server error&quot;, status=502)        → retried (callable matches)</span>
+<span class="c1"># ❌ HttpError(&quot;not found&quot;, status=404)           → re-raised (neither matches)</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Warning:</strong> If a callable filter raises an exception itself, the error is logged as a warning and the filter is treated as non-matching. The sampler continues evaluating the remaining filters in the list.</p>
 </blockquote>
 <h2 id="the-default-exceptions_dict">The Default <code>exceptions_dict</code></h2>
 <p>If you do not pass an <code>exceptions_dict</code> to <code>TimeoutSampler</code>, the default value is:</p>
@@ -330,9 +378,10 @@
 <li>The sampler records <code>exp</code> as <code>last_exp</code> and calculates <code>elapsed_time</code>.</li>
 <li>The sampler calls <code>_should_ignore_exception(exp)</code>, which iterates over every key in <code>exceptions_dict</code>:</li>
 <li>For each key class, it checks <code>isinstance(exp, key)</code>.</li>
-<li>On the first type match, it retrieves the message list and calls <code>_is_exception_matched(exp, messages)</code>.</li>
+<li>On a type match, it retrieves the filter list and calls <code>_is_exception_matched(exp, filters)</code>.</li>
+<li>If both type and filter match → return <code>True</code> (ignore the exception).</li>
 <li>
-<p>If both type and message match → return <code>True</code> (ignore the exception).</p>
+<p>If the type matches but the filter does not, the sampler <strong>continues</strong> checking subsequent entries in the dict.</p>
 </li>
 <li>
 <p><strong>If ignored:</strong> the sampler sleeps for <code>sleep</code> seconds, then calls <code>func</code> again.</p>
@@ -351,7 +400,7 @@
 <span class="p">}</span>
 </code></pre></div>
 
-<p>The first matching class wins. Once a type match is found, only that class's message list is checked. If the message filter fails for that class, the exception is re-raised — the sampler does <strong>not</strong> continue checking other classes in the dict.</p>
+<p>The sampler checks entries in iteration order. For each entry, it tests both <code>isinstance()</code> and the filter list together. If a type matches but the filter list does not pass, the sampler <strong>continues</strong> to the next entry in the dict. The exception is only re-raised if <em>no</em> entry matches on both type and filters.</p>
 <blockquote>
 <p><strong>Warning:</strong> Because <code>isinstance()</code> honors inheritance, ordering can matter when your exception classes share a parent-child relationship. If both <code>AExampleError</code> and <code>BExampleError(AExampleError)</code> are in the dict, the one that appears first during iteration will be checked first. Place more specific (child) classes before more general (parent) classes to ensure the correct message filter is applied.</p>
 </blockquote>
@@ -410,6 +459,24 @@
 <td>Re-raise immediately</td>
 </tr>
 <tr>
+<td>Callable filter match</td>
+<td><code>{HttpError: [lambda exc: exc.status &gt;= 500]}</code></td>
+<td><code>HttpError(status=503)</code></td>
+<td>Retry</td>
+</tr>
+<tr>
+<td>Callable filter no match</td>
+<td><code>{HttpError: [lambda exc: exc.status &gt;= 500]}</code></td>
+<td><code>HttpError(status=404)</code></td>
+<td>Re-raise immediately</td>
+</tr>
+<tr>
+<td>Mixed string + callable</td>
+<td><code>{HttpError: ["refused", lambda exc: exc.status &gt;= 500]}</code></td>
+<td><code>HttpError("refused", status=0)</code></td>
+<td>Retry (string matches)</td>
+</tr>
+<tr>
 <td>Subclass match</td>
 <td><code>{Exception: []}</code></td>
 <td><code>ValueError()</code></td>
@@ -440,9 +507,9 @@
 <h2 id="related-pages_1">Related Pages</h2>
 <ul>
 <li><a href="handling-exceptions.html">Filtering and Handling Exceptions</a></li>
+<li><a href="callable-exception-filters.html">Using Callable Exception Filters</a></li>
 <li><a href="api-timeout-sampler.html">TimeoutSampler API</a></li>
 <li><a href="api-exceptions.html">TimeoutExpiredError Reference</a></li>
-<li><a href="api-retry-decorator.html">@retry Decorator API</a></li>
 <li><a href="common-polling-patterns.html">Common Polling Patterns</a></li>
 </ul>
                 </div>
@@ -455,7 +522,10 @@
                 </a>
 
 
-                <div></div>
+                <a href="sensitive-key-redaction.html" class="page-nav-link page-nav-next">
+                    <span class="page-nav-label">Next</span>
+                    <span class="page-nav-title">Redacting Sensitive Data from Log Output</span>
+                </a>
 
             </nav>
 
@@ -471,8 +541,9 @@
 <li><a href="#3-no-match-re-raise-immediately">3. No Match — Re-raise Immediately</a></li>
 </ul>
 </li>
-<li><a href="#how-message-filtering-works">How Message Filtering Works</a><ul>
-<li><a href="#message-filtering-examples">Message Filtering Examples</a></li>
+<li><a href="#how-filter-matching-works">How Filter Matching Works</a><ul>
+<li><a href="#string-filters">String Filters</a></li>
+<li><a href="#callable-filters">Callable Filters</a></li>
 </ul>
 </li>
 <li><a href="#the-default-exceptions_dict">The Default exceptions_dict</a></li>
@@ -493,7 +564,7 @@
 
         <footer class="page-footer">
 
-            <span class="footer-version">Generated from version 1.0.22</span>
+            <span class="footer-version">Generated from version 1.1.0</span>
             <span class="footer-sep">&middot;</span>
 
             Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>

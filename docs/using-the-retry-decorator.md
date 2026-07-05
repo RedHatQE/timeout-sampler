@@ -37,10 +37,11 @@ That's it — the decorator handles all the polling. If `check_service_health()`
 |---|---|---|---|
 | `wait_timeout` | `int` | *(required)* | Maximum seconds to keep retrying |
 | `sleep` | `int` | *(required)* | Seconds to wait between each attempt |
-| `exceptions_dict` | `dict` | `None` | Exceptions to tolerate during polling |
+| `exceptions_dict` | `ExceptionsDict \| None` | `None` | Exceptions to tolerate during polling. Keys are exception classes; values are lists of string or callable filters. |
 | `print_log` | `bool` | `True` | Log elapsed time to console |
 | `print_func_log` | `bool` | `True` | Log function call details |
 | `print_func_args` | `bool` | `True` | Include arguments in the function log |
+| `sensitive_keys` | `frozenset[str] \| set[str] \| None` | `None` | Additional keys to redact from logged kwargs (case-insensitive). Merged with built-in defaults (`authorization`, `token`, `password`, `secret`, `api_key`, etc.). |
 
 > **Tip:** For a complete parameter reference, see [@retry Decorator API](api-retry-decorator.html).
 
@@ -121,7 +122,11 @@ print(data)  # The truthy value your function returned
 
 ### Tolerating Specific Exceptions
 
-Use `exceptions_dict` to tell the decorator which exceptions should be ignored during polling instead of stopping execution. The keys are exception classes, and the values are lists of substring patterns to match against the exception message. An empty list matches all messages for that exception type.
+Use `exceptions_dict` to tell the decorator which exceptions should be ignored during polling instead of stopping execution. The keys are exception classes, and the values are lists of filters. Each filter can be:
+
+- A **string** — matched as a substring against the exception message
+- A **callable** — receives the exception instance and returns a truthy value to ignore (retry)
+- An **empty list** — matches all instances of that exception type
 
 ```python
 @retry(
@@ -148,6 +153,32 @@ def connect_to_service():
 ```
 
 Only `ConnectionError` exceptions containing `"Connection refused"` in their message text are tolerated. Other `ConnectionError` messages will stop polling.
+
+You can also use callable filters to match on exception attributes:
+
+```python
+@retry(
+    wait_timeout=60,
+    sleep=1,
+    exceptions_dict={HttpError: [lambda exc: exc.status >= 500]},
+)
+def make_api_call():
+    return requests.get("https://my-service/api").json()
+```
+
+Only `HttpError` exceptions where `status >= 500` are tolerated — 4xx errors stop polling immediately.
+
+String and callable filters can be combined in the same list. The exception is tolerated if **any** filter matches:
+
+```python
+@retry(
+    wait_timeout=60,
+    sleep=1,
+    exceptions_dict={HttpError: ["connection refused", lambda exc: exc.status >= 500]},
+)
+def make_api_call():
+    return requests.get("https://my-service/api").json()
+```
 
 > **Note:** For a detailed explanation of how exception matching and inheritance work, see [How Exception Matching Works](exception-matching-logic.html). For more `exceptions_dict` patterns, see [Filtering and Handling Exceptions](handling-exceptions.html).
 
@@ -176,6 +207,26 @@ def check_with_secrets(api_key):
     return validate(api_key)
 ```
 
+### Redacting Sensitive Kwargs
+
+Sensitive keyword argument values (such as `Authorization`, `token`, `password`, `secret`, `api_key`, and `apikey`) are automatically replaced with `"***"` in log output. You can add your own keys with `sensitive_keys`:
+
+```python
+@retry(
+    wait_timeout=30,
+    sleep=5,
+    sensitive_keys=frozenset({"x-custom-secret"}),
+)
+def call_api(headers):
+    return requests.get("https://my-service/api", headers=headers).ok
+
+# The "x-custom-secret" value will appear as "***" in logs
+call_api(headers={"Authorization": "Bearer token", "x-custom-secret": "value"}) # pragma: allowlist secret
+```
+
+> **Note:** Key matching is case-insensitive and uses exact match — a key named `"token"` is redacted, but `"nextPageToken"` is not.
+
+
 > **Tip:** For more detail on logging options, see [Controlling Log Output](controlling-logging.html).
 
 ### When to Use @retry vs. TimeoutSampler
@@ -201,7 +252,7 @@ If your function raises an exception that isn't listed in `exceptions_dict`, pol
 
 **Logs are too noisy**
 
-Set `print_log=False` to suppress timing output, or set `print_func_args=False` to hide sensitive argument values. See [Controlling Log Output](controlling-logging.html).
+Set `print_log=False` to suppress timing output, or set `print_func_args=False` to hide sensitive argument values. To redact specific keys rather than hiding all arguments, use `sensitive_keys`. See [Controlling Log Output](controlling-logging.html).
 
 ## Related Pages
 
@@ -209,4 +260,4 @@ Set `print_log=False` to suppress timing output, or set `print_func_args=False` 
 - [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
 - [Filtering and Handling Exceptions](handling-exceptions.html)
 - [Controlling Log Output](controlling-logging.html)
-- [How Exception Matching Works](exception-matching-logic.html)
+- [Getting Started with timeout-sampler](quickstart.html)

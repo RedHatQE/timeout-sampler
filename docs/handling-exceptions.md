@@ -27,10 +27,16 @@ An empty list `[]` means "ignore this exception regardless of its message text."
 
 ## How `exceptions_dict` Works
 
-The `exceptions_dict` parameter is a dictionary that maps exception classes to lists of allowed message strings:
+The `exceptions_dict` parameter is a dictionary that maps exception classes to lists of filters. Each filter is either a substring to match against the exception message, or a callable that receives the exception and returns a truthy value to ignore it:
 
 ```python
-exceptions_dict: dict[type[Exception], list[str]] | None
+from timeout_sampler import ExceptionsDict, ExceptionFilter
+
+# Type aliases (importable from timeout_sampler):
+# ExceptionFilter = str | Callable[[Exception], bool]
+# ExceptionsDict = dict[type[Exception], list[ExceptionFilter]]
+
+exceptions_dict: ExceptionsDict | None
 ```
 
 | Value | Meaning |
@@ -38,6 +44,8 @@ exceptions_dict: dict[type[Exception], list[str]] | None
 | `{SomeError: []}` | Ignore **all** `SomeError` exceptions (any message) |
 | `{SomeError: ["connection refused"]}` | Ignore `SomeError` only when the message **contains** `"connection refused"` |
 | `{SomeError: ["timeout", "refused"]}` | Ignore `SomeError` when the message contains `"timeout"` **or** `"refused"` |
+| `{SomeError: [lambda exc: exc.status >= 500]}` | Ignore `SomeError` only when the callable returns a truthy value |
+| `{SomeError: ["refused", lambda exc: exc.retry]}` | Ignore when **any** filter matches (string **or** callable) |
 | `{}` | Ignore **nothing** — any exception immediately stops polling |
 | `None` (or omitted) | Defaults to `{Exception: []}` — ignore all exceptions |
 
@@ -85,7 +93,50 @@ Here, a `RuntimeError("service temporarily unavailable")` is ignored (substring 
 
 > **Note:** Message matching uses a simple substring check (`msg in str(exception)`), not regex. The match is case-sensitive.
 
-### 3. Handle Multiple Exception Types
+### 3. Match with a Callable Filter
+
+When you need to inspect exception attributes (not just the message text), use a callable filter. The callable receives the exception instance and should return a truthy value to ignore (retry):
+
+```python
+from timeout_sampler import TimeoutSampler
+
+# Only retry on HTTP 5xx errors; 4xx errors raise immediately
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    exceptions_dict={HttpError: [lambda exc: exc.status >= 500]},
+):
+    if sample:
+        break
+```
+
+Here, an `HttpError` with `status=502` is ignored, but an `HttpError` with `status=404` immediately stops polling.
+
+> **Tip:** Callable filters must accept exactly one positional argument (the exception instance). If a callable raises an error at runtime (e.g., accessing a missing attribute), it is logged as a warning and treated as non-matching.
+
+### 4. Combine String and Callable Filters
+
+String and callable filters can be mixed in the same list. The exception is ignored if **any** filter matches:
+
+```python
+from timeout_sampler import TimeoutSampler
+
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    exceptions_dict={
+        HttpError: ["connection refused", lambda exc: exc.status >= 500],
+    },
+):
+    if sample:
+        break
+```
+
+This ignores `HttpError` when the message contains `"connection refused"` **or** when the status code is 500+.
+
+### 5. Handle Multiple Exception Types
 
 Add multiple entries to the dictionary, each with its own message filter:
 
@@ -106,7 +157,7 @@ for sample in TimeoutSampler(
         break
 ```
 
-### 4. Re-raise All Exceptions (No Filtering)
+### 6. Re-raise All Exceptions (No Filtering)
 
 Pass an empty dictionary to ensure any exception immediately stops polling:
 
@@ -123,7 +174,7 @@ for sample in TimeoutSampler(
         break
 ```
 
-### 5. Use with the `@retry` Decorator
+### 7. Use with the `@retry` Decorator
 
 The `exceptions_dict` parameter works identically with the `@retry` decorator:
 
@@ -167,8 +218,8 @@ This means you can filter broadly by specifying a base class, or narrowly by spe
 
 When your polled function raises an exception, exactly one of three things happens:
 
-1. **Exact match or child class, message matches** → exception is ignored, polling continues
-2. **Exact match or child class, message does NOT match** → polling stops, `TimeoutExpiredError` is raised immediately
+1. **Exact match or child class, filter matches** (substring found or callable returns truthy) → exception is ignored, polling continues
+2. **Exact match or child class, no filter matches** → polling stops, `TimeoutExpiredError` is raised immediately
 3. **Exception type not in `exceptions_dict`** → polling stops, `TimeoutExpiredError` is raised immediately
 
 For a deeper look at the matching algorithm, see [How Exception Matching Works](exception-matching-logic.html).
@@ -199,16 +250,28 @@ except TimeoutExpiredError as e:
 
 See [TimeoutExpiredError Reference](api-exceptions.html) for all available attributes.
 
-### Empty Strings in Message Lists
+### Input Validation
 
-An empty string in the message list is **not** treated as a wildcard — it is explicitly skipped. Use an empty list `[]` instead to match all messages:
+The `exceptions_dict` is validated at `__init__` time. Invalid configurations raise `TypeError` immediately:
+
+- **Empty strings** in filter lists are rejected — use an empty list `[]` to match all messages
+- **Non-string, non-callable** filter items (e.g., `int`, `None`) are rejected
+- **Classes** passed as filter items (e.g., `{ValueError: [TypeError]}`) are rejected — use a lambda instead
+- **Keys** must be `Exception` subclasses
+- **Values** must be lists
 
 ```python
-# ❌ WRONG — the empty string "" is ignored, so NO messages match
+# ❌ WRONG — empty string raises TypeError at init
 exceptions_dict = {ValueError: [""]}
+
+# ❌ WRONG — class passed as filter raises TypeError at init
+exceptions_dict = {ValueError: [TypeError]}
 
 # ✅ CORRECT — empty list means "match all messages"
 exceptions_dict = {ValueError: []}
+
+# ✅ CORRECT — callable filter
+exceptions_dict = {ValueError: [lambda exc: "retry" in str(exc)]}
 ```
 
 ## Troubleshooting
@@ -218,12 +281,14 @@ exceptions_dict = {ValueError: []}
 | All exceptions are swallowed silently | `exceptions_dict` was omitted (defaults to `{Exception: []}`) | Pass an explicit `exceptions_dict` with only the types you want to ignore |
 | Exception is not being ignored | The raised exception is a **parent** of the class in `exceptions_dict`, not a child | Add the parent class to `exceptions_dict`, or use a broader base class |
 | Message filter doesn't match | Substring matching is case-sensitive | Verify the exact exception message text and case |
-| `TimeoutExpiredError` raised immediately despite exception being in dict | The exception message doesn't contain any of the specified substrings | Use `[]` to ignore all messages, or add the correct substring |
+| Callable filter not working | The callable raises an error (e.g., accessing a missing attribute) | Check logs for "treating as non-matching" warnings; fix the callable |
+| `TypeError` raised at init | Invalid `exceptions_dict` format (empty string, non-callable item, class as filter) | See [Input Validation](#input-validation) for valid formats |
+| `TimeoutExpiredError` raised immediately despite exception being in dict | No filter in the list matches (neither substring nor callable) | Use `[]` to ignore all messages, or add the correct filter |
 
 ## Related Pages
 
 - [How Exception Matching Works](exception-matching-logic.html)
+- [Using Callable Exception Filters](callable-exception-filters.html)
 - [TimeoutExpiredError Reference](api-exceptions.html)
 - [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
 - [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
-- [TimeoutSampler API](api-timeout-sampler.html)

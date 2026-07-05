@@ -1,6 +1,6 @@
 ## Prerequisites
 
-- Python 3.9 or later
+- Python 3.10 or later
 - `pip` (or any Python package manager)
 
 ## Install
@@ -135,6 +135,8 @@ for sample in TimeoutSampler(
 
 - `{ConnectionError: []}` — ignore all `ConnectionError` instances (and subclasses) and keep polling.
 - `{ConnectionError: ["refused"]}` — only ignore a `ConnectionError` whose message contains `"refused"`; any other `ConnectionError` re-raises immediately.
+- `{HttpError: [lambda exc: exc.status >= 500]}` — use a **callable filter** to retry only when the exception's `status` attribute is 500 or above; 4xx errors re-raise immediately.
+- `{HttpError: ["connection refused", lambda exc: exc.status >= 500]}` — combine string and callable filters in the same list; the exception is ignored if *any* filter matches.
 - `{}` — do **not** ignore any exceptions; every exception re-raises immediately.
 
 > **Warning:** Passing an empty dict `{}` means *no* exceptions are caught. If you want to catch all exceptions (the default), omit `exceptions_dict` entirely or pass `{Exception: []}`.
@@ -161,6 +163,23 @@ for sample in TimeoutSampler(
     if sample:
         break
 ```
+
+Sensitive keyword arguments such as `Authorization`, `token`, `password`, and `api_key` are **automatically redacted** from log output. To add your own keys, pass `sensitive_keys`:
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=call_api,
+    sensitive_keys=frozenset({"x-custom-secret"}),
+    headers={"Authorization": "Bearer token", "x-custom-secret": "value"}, # pragma: allowlist secret
+):
+    if sample:
+        break
+# Log output: Kwargs: {'headers': {'Authorization': '***', 'x-custom-secret': '***'}}
+```
+
+> **Tip:** The default sensitive keys are `authorization`, `token`, `access_token`, `password`, `secret`, `api_key`, and `apikey` (case-insensitive exact match). Custom keys from `sensitive_keys` are merged with the defaults.
 
 See [Controlling Log Output](controlling-logging.html) for details.
 
@@ -195,6 +214,6 @@ See [Tracking Elapsed Time with TimeoutWatch](tracking-elapsed-time.html) for mo
 
 - [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
 - [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
-- [Filtering and Handling Exceptions](handling-exceptions.html)
-- [Common Polling Patterns](common-polling-patterns.html)
 - [TimeoutSampler API](api-timeout-sampler.html)
+- [Common Polling Patterns](common-polling-patterns.html)
+- [Filtering and Handling Exceptions](handling-exceptions.html)

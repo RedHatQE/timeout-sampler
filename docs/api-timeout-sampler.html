@@ -143,6 +143,27 @@
                 </ul>
             </div>
 
+            <div class="nav-group">
+                <h3 class="nav-group-title">Guides</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="sensitive-key-redaction.html"
+                           class="nav-link">
+                            Redacting Sensitive Data from Log Output
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="callable-exception-filters.html"
+                           class="nav-link">
+                            Using Callable Exception Filters
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
         </nav>
     </aside>
 
@@ -199,10 +220,11 @@
     <span class="n">wait_timeout</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">sleep</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="n">func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
-    <span class="n">exceptions_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">type</span><span class="p">[</span><span class="ne">Exception</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">exceptions_dict</span><span class="p">:</span> <span class="n">ExceptionsDict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">print_log</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">print_func_log</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">print_func_args</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">sensitive_keys</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">func_args</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="o">**</span><span class="n">func_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
 <span class="p">)</span>
@@ -239,9 +261,9 @@
 </tr>
 <tr>
 <td><code>exceptions_dict</code></td>
-<td><code>dict[type[Exception], list[str]] \| None</code></td>
+<td><code>ExceptionsDict \| None</code></td>
 <td><code>None</code></td>
-<td>Map of exception types to message-filter lists. When <code>None</code>, defaults to <code>{Exception: []}</code> (all exceptions ignored). See <a href="exception-matching-logic.html">How Exception Matching Works</a>.</td>
+<td>Map of exception types to filter lists. Filters can be strings (matched as substrings of <code>str(exception)</code>) or callables (invoked with the exception instance, returning truthy to ignore). When <code>None</code>, defaults to <code>{Exception: []}</code> (all exceptions ignored). See <a href="exception-matching-logic.html">How Exception Matching Works</a>.</td>
 </tr>
 <tr>
 <td><code>print_log</code></td>
@@ -262,6 +284,12 @@
 <td>Include <code>func_args</code> and <code>func_kwargs</code> in the log when <code>print_func_log</code> is <code>True</code>.</td>
 </tr>
 <tr>
+<td><code>sensitive_keys</code></td>
+<td><code>frozenset[str] \| set[str] \| None</code></td>
+<td><code>None</code></td>
+<td>Additional keys to redact from logged kwargs (case-insensitive exact match). Merged with the built-in default sensitive keys. See <a href="#sensitive-key-redaction">Sensitive Key Redaction</a>.</td>
+</tr>
+<tr>
 <td><code>func_args</code></td>
 <td><code>tuple[Any] \| None</code></td>
 <td><code>None</code></td>
@@ -277,6 +305,7 @@
 </table>
 <blockquote>
 <p><strong>Note:</strong> When <code>exceptions_dict</code> is omitted (or <code>None</code>), it defaults to <code>{Exception: []}</code>, which silently ignores <strong>all</strong> exceptions raised inside <code>func</code> until the timeout expires. Pass an explicit empty dict <code>{}</code> to re-raise every exception immediately.</p>
+<p><strong>Note:</strong> The <code>exceptions_dict</code> is validated at construction time. Keys must be <code>Exception</code> subclasses, values must be lists, and filter items must be non-empty strings or callables. Passing invalid types (e.g., a class instead of a callable, or an empty string) raises <code>TypeError</code> immediately.</p>
 </blockquote>
 <h3 id="example-basic-construction">Example — Basic Construction</h3>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeoutSampler</span>
@@ -357,11 +386,12 @@
 <p>For a detailed walkthrough of the matching algorithm, see <a href="exception-matching-logic.html">How Exception Matching Works</a>.</p>
 <h3 id="exceptions_dict-format"><code>exceptions_dict</code> Format</h3>
 <div class="highlight"><pre><span></span><code><span class="p">{</span>
-    <span class="n">ExceptionClass</span><span class="p">:</span> <span class="p">[</span><span class="n">message_substring_1</span><span class="p">,</span> <span class="n">message_substring_2</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span>
+    <span class="n">ExceptionClass</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;message_substring&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">exc</span><span class="p">:</span> <span class="n">exc</span><span class="o">.</span><span class="n">attr</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span>
     <span class="n">AnotherException</span><span class="p">:</span> <span class="p">[],</span>   <span class="c1"># empty list = match all messages</span>
 <span class="p">}</span>
 </code></pre></div>
 
+<p>Filter items can be <strong>strings</strong> (matched as substrings of <code>str(exception)</code>) or <strong>callables</strong> (invoked with the exception instance, returning a truthy value to ignore/retry). Both types can be combined in the same list.</p>
 <table>
 <thead>
 <tr>
@@ -387,13 +417,22 @@
 <td><code>ValueError</code> is ignored only if <code>"connection"</code> appears in <code>str(exp)</code>.</td>
 </tr>
 <tr>
+<td><code>{HttpError: [lambda exc: exc.status &gt;= 500]}</code></td>
+<td><code>HttpError</code> is ignored only if the callable returns truthy.</td>
+</tr>
+<tr>
+<td><code>{HttpError: ["connection refused", lambda exc: exc.status &gt;= 500]}</code></td>
+<td><code>HttpError</code> is ignored if <strong>either</strong> the string matches <strong>or</strong> the callable returns truthy.</td>
+</tr>
+<tr>
 <td><code>{KeyError: ["x"], IndexError: ["y"]}</code></td>
-<td>Multiple exception types, each with independent message filters.</td>
+<td>Multiple exception types, each with independent filters.</td>
 </tr>
 </tbody>
 </table>
 <blockquote>
 <p><strong>Tip:</strong> The match uses <code>isinstance()</code>, so a parent class in <code>exceptions_dict</code> will also catch child classes. See <a href="exception-matching-logic.html">How Exception Matching Works</a> for inheritance examples.</p>
+<p><strong>Warning:</strong> If a callable filter raises an exception itself (e.g., accessing a missing attribute), it is logged as a warning and treated as non-matching — it will <strong>not</strong> propagate.</p>
 </blockquote>
 <h3 id="exception-handling-outcomes">Exception Handling Outcomes</h3>
 <table>
@@ -405,11 +444,11 @@
 </thead>
 <tbody>
 <tr>
-<td>Exception class (or parent) is in <code>exceptions_dict</code> and message matches (or filter list is empty)</td>
+<td>Exception class (or parent) is in <code>exceptions_dict</code> and a filter matches (string substring, callable returns truthy, or filter list is empty)</td>
 <td>Exception is <strong>ignored</strong>; sampler sleeps and retries.</td>
 </tr>
 <tr>
-<td>Exception class is in <code>exceptions_dict</code> but message does <strong>not</strong> match any filter string</td>
+<td>Exception class is in <code>exceptions_dict</code> but <strong>no</strong> filter matches</td>
 <td><code>TimeoutExpiredError</code> is raised <strong>immediately</strong>.</td>
 </tr>
 <tr>
@@ -449,12 +488,47 @@
 </code></pre></div>
 
 <p>A <code>ValueError("resource not ready")</code> is ignored (contains <code>"not ready"</code>). A <code>ValueError("invalid input")</code> causes an immediate <code>TimeoutExpiredError</code>.</p>
+<h3 id="example-callable-filter">Example — Callable Filter</h3>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeoutSampler</span>
+
+<span class="c1"># Only retry on HTTP 5xx errors; 4xx errors raise immediately.</span>
+<span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
+    <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+    <span class="n">sleep</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">func</span><span class="o">=</span><span class="n">make_request</span><span class="p">,</span>
+    <span class="n">exceptions_dict</span><span class="o">=</span><span class="p">{</span><span class="n">HttpError</span><span class="p">:</span> <span class="p">[</span><span class="k">lambda</span> <span class="n">exc</span><span class="p">:</span> <span class="n">exc</span><span class="o">.</span><span class="n">status</span> <span class="o">&gt;=</span> <span class="mi">500</span><span class="p">]},</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+        <span class="k">break</span>
+</code></pre></div>
+
+<h3 id="example-mixed-string-and-callable-filters">Example — Mixed String and Callable Filters</h3>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeoutSampler</span>
+
+<span class="c1"># Retry if message contains &quot;connection refused&quot; OR status &gt;= 500.</span>
+<span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
+    <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+    <span class="n">sleep</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">func</span><span class="o">=</span><span class="n">make_request</span><span class="p">,</span>
+    <span class="n">exceptions_dict</span><span class="o">=</span><span class="p">{</span><span class="n">HttpError</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;connection refused&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">exc</span><span class="p">:</span> <span class="n">exc</span><span class="o">.</span><span class="n">status</span> <span class="o">&gt;=</span> <span class="mi">500</span><span class="p">]},</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+        <span class="k">break</span>
+</code></pre></div>
+
 <hr />
 <h2 id="internal-methods">Internal Methods</h2>
 <p>These methods are not part of the public API but are documented for contributor reference.</p>
+<h3 id="_validate_exceptions_dict"><code>_validate_exceptions_dict</code></h3>
+<div class="highlight"><pre><span></span><code><span class="nd">@staticmethod</span>
+<span class="n">_validate_exceptions_dict</span><span class="p">(</span><span class="n">exceptions_dict</span><span class="p">:</span> <span class="n">ExceptionsDict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ExceptionsDict</span>
+</code></pre></div>
+
+<p>Validates and returns a defensive copy of <code>exceptions_dict</code>. Called during <code>__init__</code>.</p>
+<p><strong>Raises:</strong> <code>TypeError</code> if keys aren't <code>Exception</code> subclasses, values aren't lists, or filter items aren't non-empty strings or callables. Passing a class (e.g., <code>ValueError</code>) as a filter item instead of a callable also raises <code>TypeError</code>.</p>
 <h3 id="_is_exception_matched"><code>_is_exception_matched</code></h3>
 <div class="highlight"><pre><span></span><code><span class="nd">@staticmethod</span>
-<span class="n">_is_exception_matched</span><span class="p">(</span><span class="n">exp</span><span class="p">:</span> <span class="ne">Exception</span><span class="p">,</span> <span class="n">exception_messages</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span>
+<span class="n">_is_exception_matched</span><span class="p">(</span><span class="n">exp</span><span class="p">:</span> <span class="ne">Exception</span><span class="p">,</span> <span class="n">exception_filters</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ExceptionFilter</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span>
 </code></pre></div>
 
 <table>
@@ -472,15 +546,15 @@
 <td>The exception instance raised by <code>func</code>.</td>
 </tr>
 <tr>
-<td><code>exception_messages</code></td>
-<td><code>list[str]</code></td>
-<td>List of allowed substrings. Empty list matches everything.</td>
+<td><code>exception_filters</code></td>
+<td><code>list[ExceptionFilter]</code></td>
+<td>List of allowed filters — strings (substring match against <code>str(exp)</code>) or callables (invoked with <code>exp</code>, returning truthy to match). Empty list matches everything.</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Returns:</strong> <code>True</code> if <code>exception_messages</code> is empty, or if any non-empty string in the list is a substring of <code>str(exp)</code>. <code>False</code> otherwise.</p>
+<p><strong>Returns:</strong> <code>True</code> if <code>exception_filters</code> is empty, if any string in the list is a substring of <code>str(exp)</code>, or if any callable returns a truthy value when called with <code>exp</code>. <code>False</code> otherwise.</p>
 <blockquote>
-<p><strong>Note:</strong> Empty strings in the message list are explicitly skipped — they will not produce a match.</p>
+<p><strong>Note:</strong> If a callable filter raises an exception when invoked, a warning is logged and the filter is treated as non-matching.</p>
 </blockquote>
 <h3 id="_should_ignore_exception"><code>_should_ignore_exception</code></h3>
 <div class="highlight"><pre><span></span><code><span class="n">_should_ignore_exception</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exp</span><span class="p">:</span> <span class="ne">Exception</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span>
@@ -508,12 +582,17 @@
 </code></pre></div>
 
 <p>Resolves function metadata (<code>__module__</code>, <code>__name__</code>) for regular, <code>partial</code>, and <code>lambda</code> functions. Used internally to build log messages.</p>
-<h3 id="_func_log-property"><code>_func_log</code> (property)</h3>
-<div class="highlight"><pre><span></span><code><span class="nd">@property</span>
+<h3 id="_redact"><code>_redact</code></h3>
+<div class="highlight"><pre><span></span><code><span class="n">_redact</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">_depth</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span>
+</code></pre></div>
+
+<p>Recursively redacts values whose keys exactly match sensitive keys (case-insensitive). Traverses dicts, lists, and tuples up to <code>_MAX_REDACT_DEPTH</code> (20) levels. Values for matching keys are replaced with <code>"***"</code>.</p>
+<h3 id="_func_log-cached-property"><code>_func_log</code> (cached property)</h3>
+<div class="highlight"><pre><span></span><code><span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
 <span class="n">_func_log</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span>
 </code></pre></div>
 
-<p><strong>Returns:</strong> A formatted string describing the function call, e.g. <code>"Function: mymodule.my_func Args: (1, 2) Kwargs: {'key': 'val'}"</code>. Controlled by <code>print_func_log</code> and <code>print_func_args</code>.</p>
+<p><strong>Returns:</strong> A formatted string describing the function call, e.g. <code>"Function: mymodule.my_func Args: (1, 2) Kwargs: {'key': 'val'}"</code>. Controlled by <code>print_func_log</code> and <code>print_func_args</code>. Sensitive values in args and kwargs are redacted.</p>
 <h3 id="_get_exception_log"><code>_get_exception_log</code></h3>
 <div class="highlight"><pre><span></span><code><span class="n">_get_exception_log</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exp</span><span class="p">:</span> <span class="ne">Exception</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span>
 </code></pre></div>
@@ -566,6 +645,30 @@
 </table>
 <p>See <a href="api-exceptions.html">TimeoutExpiredError Reference</a> for the full attribute and string-representation reference.</p>
 <hr />
+<h2 id="sensitive-key-redaction">Sensitive Key Redaction</h2>
+<p>When logging function arguments, <code>TimeoutSampler</code> automatically redacts values for keys that match known sensitive names. Matching is <strong>case-insensitive</strong> and <strong>exact</strong> (e.g., <code>"token"</code> matches a key named <code>"Token"</code> or <code>"TOKEN"</code> but <strong>not</strong> <code>"nextPageToken"</code>).</p>
+<h3 id="default-sensitive-keys">Default Sensitive Keys</h3>
+<p><code>authorization</code>, <code>token</code>, <code>access_token</code>, <code>password</code>, <code>secret</code>, <code>api_key</code>, <code>apikey</code></p>
+<h3 id="adding-custom-keys">Adding Custom Keys</h3>
+<p>Pass the <code>sensitive_keys</code> parameter to merge additional keys with the defaults:</p>
+<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
+    <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+    <span class="n">sleep</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">func</span><span class="o">=</span><span class="n">call_api</span><span class="p">,</span>
+    <span class="n">sensitive_keys</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;x-custom-secret&quot;</span><span class="p">}),</span>
+    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="s2">&quot;Bearer token&quot;</span><span class="p">,</span> <span class="s2">&quot;x-custom-secret&quot;</span><span class="p">:</span> <span class="s2">&quot;value&quot;</span><span class="p">},</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+        <span class="k">break</span>
+<span class="c1"># Log output: Kwargs: {&#39;headers&#39;: {&#39;Authorization&#39;: &#39;***&#39;, &#39;x-custom-secret&#39;: &#39;***&#39;}}</span>
+</code></pre></div>
+
+<p>Redaction traverses dicts, lists, and tuples recursively up to 20 levels deep. Data nested beyond this limit is replaced with <code>"&lt;redacted: max depth exceeded&gt;"</code>.</p>
+<blockquote>
+<p><strong>Note:</strong> Passing an empty <code>frozenset()</code> as <code>sensitive_keys</code> still uses all default sensitive keys. To redact <strong>only</strong> defaults, omit the parameter entirely.</p>
+<p><strong>Warning:</strong> All elements of <code>sensitive_keys</code> must be strings. Passing non-string elements (e.g., <code>int</code>, <code>None</code>) raises <code>TypeError</code> at construction time.</p>
+</blockquote>
+<hr />
 <h2 id="logging-behavior">Logging Behavior</h2>
 <p>Logging is emitted via <code>simple_logger</code> at <code>INFO</code> level.</p>
 <table>
@@ -590,7 +693,7 @@
 <tr>
 <td><code>print_func_args</code></td>
 <td><code>True</code></td>
-<td>Includes <code>Args</code> and <code>Kwargs</code> in the function log. Requires <code>print_func_log=True</code>.</td>
+<td>Includes <code>Args</code> and <code>Kwargs</code> in the function log (with sensitive values redacted). Requires <code>print_func_log=True</code>.</td>
 </tr>
 </tbody>
 </table>
@@ -601,13 +704,40 @@
 </code></pre></div>
 
 <p>The class is exported from the top-level <code>timeout_sampler</code> package (<code>timeout_sampler/__init__.py</code>).</p>
+<hr />
+<h2 id="type-aliases">Type Aliases</h2>
+<p>The following public type aliases are used in the <code>TimeoutSampler</code> API and are re-exported from the <code>timeout_sampler</code> package:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExceptionFilter</span><span class="p">,</span> <span class="n">ExceptionsDict</span>
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>Alias</th>
+<th>Definition</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ExceptionFilter</code></td>
+<td><code>str \| Callable[[Exception], bool]</code></td>
+<td>A single filter item — either a substring to match against <code>str(exception)</code> or a callable that receives the exception and returns truthy to ignore.</td>
+</tr>
+<tr>
+<td><code>ExceptionsDict</code></td>
+<td><code>dict[type[Exception], list[ExceptionFilter]]</code></td>
+<td>Mapping of exception classes to their filter lists. Used as the type for the <code>exceptions_dict</code> parameter.</td>
+</tr>
+</tbody>
+</table>
 <h2 id="related-pages">Related Pages</h2>
 <ul>
 <li><a href="polling-with-timeout-sampler.html">Polling a Function with TimeoutSampler</a></li>
-<li><a href="api-exceptions.html">TimeoutExpiredError Reference</a></li>
 <li><a href="exception-matching-logic.html">How Exception Matching Works</a></li>
+<li><a href="api-exceptions.html">TimeoutExpiredError Reference</a></li>
 <li><a href="controlling-logging.html">Controlling Log Output</a></li>
-<li><a href="api-timeout-watch.html">TimeoutWatch API</a></li>
+<li><a href="api-retry-decorator.html">@retry Decorator API</a></li>
 </ul>
                 </div>
             </article>
@@ -648,19 +778,29 @@
 <li><a href="#exception-handling-outcomes">Exception Handling Outcomes</a></li>
 <li><a href="#example-ignore-specific-exceptions">Example — Ignore Specific Exceptions</a></li>
 <li><a href="#example-filter-by-exception-message">Example — Filter by Exception Message</a></li>
+<li><a href="#example-callable-filter">Example — Callable Filter</a></li>
+<li><a href="#example-mixed-string-and-callable-filters">Example — Mixed String and Callable Filters</a></li>
 </ul>
 </li>
 <li><a href="#internal-methods">Internal Methods</a><ul>
+<li><a href="#_validate_exceptions_dict">_validate_exceptions_dict</a></li>
 <li><a href="#_is_exception_matched">_is_exception_matched</a></li>
 <li><a href="#_should_ignore_exception">_should_ignore_exception</a></li>
 <li><a href="#_get_func_info">_get_func_info</a></li>
-<li><a href="#_func_log-property">_func_log (property)</a></li>
+<li><a href="#_redact">_redact</a></li>
+<li><a href="#_func_log-cached-property">_func_log (cached property)</a></li>
 <li><a href="#_get_exception_log">_get_exception_log</a></li>
 </ul>
 </li>
 <li><a href="#raised-exceptions">Raised Exceptions</a></li>
+<li><a href="#sensitive-key-redaction">Sensitive Key Redaction</a><ul>
+<li><a href="#default-sensitive-keys">Default Sensitive Keys</a></li>
+<li><a href="#adding-custom-keys">Adding Custom Keys</a></li>
+</ul>
+</li>
 <li><a href="#logging-behavior">Logging Behavior</a></li>
 <li><a href="#import-path">Import Path</a></li>
+<li><a href="#type-aliases">Type Aliases</a></li>
 <li><a href="#related-pages">Related Pages</a></li>
 </ul>
 </div>
@@ -673,7 +813,7 @@
 
         <footer class="page-footer">
 
-            <span class="footer-version">Generated from version 1.0.22</span>
+            <span class="footer-version">Generated from version 1.1.0</span>
             <span class="footer-sep">&middot;</span>
 
             Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>

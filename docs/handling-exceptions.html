@@ -143,6 +143,27 @@
                 </ul>
             </div>
 
+            <div class="nav-group">
+                <h3 class="nav-group-title">Guides</h3>
+                <ul class="nav-group-pages">
+
+                    <li>
+                        <a href="sensitive-key-redaction.html"
+                           class="nav-link">
+                            Redacting Sensitive Data from Log Output
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="callable-exception-filters.html"
+                           class="nav-link">
+                            Using Callable Exception Filters
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+
         </nav>
     </aside>
 
@@ -212,8 +233,14 @@
 
 <p>An empty list <code>[]</code> means "ignore this exception regardless of its message text." If <code>fetch_data()</code> raises a <code>ConnectionError</code>, polling continues. Any other exception type immediately stops the loop.</p>
 <h2 id="how-exceptions_dict-works">How <code>exceptions_dict</code> Works</h2>
-<p>The <code>exceptions_dict</code> parameter is a dictionary that maps exception classes to lists of allowed message strings:</p>
-<div class="highlight"><pre><span></span><code><span class="n">exceptions_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">type</span><span class="p">[</span><span class="ne">Exception</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span>
+<p>The <code>exceptions_dict</code> parameter is a dictionary that maps exception classes to lists of filters. Each filter is either a substring to match against the exception message, or a callable that receives the exception and returns a truthy value to ignore it:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExceptionsDict</span><span class="p">,</span> <span class="n">ExceptionFilter</span>
+
+<span class="c1"># Type aliases (importable from timeout_sampler):</span>
+<span class="c1"># ExceptionFilter = str | Callable[[Exception], bool]</span>
+<span class="c1"># ExceptionsDict = dict[type[Exception], list[ExceptionFilter]]</span>
+
+<span class="n">exceptions_dict</span><span class="p">:</span> <span class="n">ExceptionsDict</span> <span class="o">|</span> <span class="kc">None</span>
 </code></pre></div>
 
 <table>
@@ -235,6 +262,14 @@
 <tr>
 <td><code>{SomeError: ["timeout", "refused"]}</code></td>
 <td>Ignore <code>SomeError</code> when the message contains <code>"timeout"</code> <strong>or</strong> <code>"refused"</code></td>
+</tr>
+<tr>
+<td><code>{SomeError: [lambda exc: exc.status &gt;= 500]}</code></td>
+<td>Ignore <code>SomeError</code> only when the callable returns a truthy value</td>
+</tr>
+<tr>
+<td><code>{SomeError: ["refused", lambda exc: exc.retry]}</code></td>
+<td>Ignore when <strong>any</strong> filter matches (string <strong>or</strong> callable)</td>
 </tr>
 <tr>
 <td><code>{}</code></td>
@@ -284,7 +319,43 @@
 <blockquote>
 <p><strong>Note:</strong> Message matching uses a simple substring check (<code>msg in str(exception)</code>), not regex. The match is case-sensitive.</p>
 </blockquote>
-<h3 id="3-handle-multiple-exception-types">3. Handle Multiple Exception Types</h3>
+<h3 id="3-match-with-a-callable-filter">3. Match with a Callable Filter</h3>
+<p>When you need to inspect exception attributes (not just the message text), use a callable filter. The callable receives the exception instance and should return a truthy value to ignore (retry):</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeoutSampler</span>
+
+<span class="c1"># Only retry on HTTP 5xx errors; 4xx errors raise immediately</span>
+<span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
+    <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+    <span class="n">sleep</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">func</span><span class="o">=</span><span class="n">make_request</span><span class="p">,</span>
+    <span class="n">exceptions_dict</span><span class="o">=</span><span class="p">{</span><span class="n">HttpError</span><span class="p">:</span> <span class="p">[</span><span class="k">lambda</span> <span class="n">exc</span><span class="p">:</span> <span class="n">exc</span><span class="o">.</span><span class="n">status</span> <span class="o">&gt;=</span> <span class="mi">500</span><span class="p">]},</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+        <span class="k">break</span>
+</code></pre></div>
+
+<p>Here, an <code>HttpError</code> with <code>status=502</code> is ignored, but an <code>HttpError</code> with <code>status=404</code> immediately stops polling.</p>
+<blockquote>
+<p><strong>Tip:</strong> Callable filters must accept exactly one positional argument (the exception instance). If a callable raises an error at runtime (e.g., accessing a missing attribute), it is logged as a warning and treated as non-matching.</p>
+</blockquote>
+<h3 id="4-combine-string-and-callable-filters">4. Combine String and Callable Filters</h3>
+<p>String and callable filters can be mixed in the same list. The exception is ignored if <strong>any</strong> filter matches:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeoutSampler</span>
+
+<span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">TimeoutSampler</span><span class="p">(</span>
+    <span class="n">wait_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+    <span class="n">sleep</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">func</span><span class="o">=</span><span class="n">make_request</span><span class="p">,</span>
+    <span class="n">exceptions_dict</span><span class="o">=</span><span class="p">{</span>
+        <span class="n">HttpError</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;connection refused&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">exc</span><span class="p">:</span> <span class="n">exc</span><span class="o">.</span><span class="n">status</span> <span class="o">&gt;=</span> <span class="mi">500</span><span class="p">],</span>
+    <span class="p">},</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="n">sample</span><span class="p">:</span>
+        <span class="k">break</span>
+</code></pre></div>
+
+<p>This ignores <code>HttpError</code> when the message contains <code>"connection refused"</code> <strong>or</strong> when the status code is 500+.</p>
+<h3 id="5-handle-multiple-exception-types">5. Handle Multiple Exception Types</h3>
 <p>Add multiple entries to the dictionary, each with its own message filter:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeoutSampler</span>
 
@@ -302,7 +373,7 @@
         <span class="k">break</span>
 </code></pre></div>
 
-<h3 id="4-re-raise-all-exceptions-no-filtering">4. Re-raise All Exceptions (No Filtering)</h3>
+<h3 id="6-re-raise-all-exceptions-no-filtering">6. Re-raise All Exceptions (No Filtering)</h3>
 <p>Pass an empty dictionary to ensure any exception immediately stops polling:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeoutSampler</span>
 
@@ -316,7 +387,7 @@
         <span class="k">break</span>
 </code></pre></div>
 
-<h3 id="5-use-with-the-retry-decorator">5. Use with the <code>@retry</code> Decorator</h3>
+<h3 id="7-use-with-the-retry-decorator">7. Use with the <code>@retry</code> Decorator</h3>
 <p>The <code>exceptions_dict</code> parameter works identically with the <code>@retry</code> decorator:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">retry</span>
 
@@ -375,8 +446,8 @@
 <h3 id="three-outcome-categories">Three Outcome Categories</h3>
 <p>When your polled function raises an exception, exactly one of three things happens:</p>
 <ol>
-<li><strong>Exact match or child class, message matches</strong> → exception is ignored, polling continues</li>
-<li><strong>Exact match or child class, message does NOT match</strong> → polling stops, <code>TimeoutExpiredError</code> is raised immediately</li>
+<li><strong>Exact match or child class, filter matches</strong> (substring found or callable returns truthy) → exception is ignored, polling continues</li>
+<li><strong>Exact match or child class, no filter matches</strong> → polling stops, <code>TimeoutExpiredError</code> is raised immediately</li>
 <li><strong>Exception type not in <code>exceptions_dict</code></strong> → polling stops, <code>TimeoutExpiredError</code> is raised immediately</li>
 </ol>
 <p>For a deeper look at the matching algorithm, see <a href="exception-matching-logic.html">How Exception Matching Works</a>.</p>
@@ -403,13 +474,26 @@
 <p><strong>Note:</strong> If the function never raised an exception (it just returned falsy values until timeout), <code>last_exp</code> is <code>None</code>.</p>
 </blockquote>
 <p>See <a href="api-exceptions.html">TimeoutExpiredError Reference</a> for all available attributes.</p>
-<h3 id="empty-strings-in-message-lists">Empty Strings in Message Lists</h3>
-<p>An empty string in the message list is <strong>not</strong> treated as a wildcard — it is explicitly skipped. Use an empty list <code>[]</code> instead to match all messages:</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># ❌ WRONG — the empty string &quot;&quot; is ignored, so NO messages match</span>
+<h3 id="input-validation">Input Validation</h3>
+<p>The <code>exceptions_dict</code> is validated at <code>__init__</code> time. Invalid configurations raise <code>TypeError</code> immediately:</p>
+<ul>
+<li><strong>Empty strings</strong> in filter lists are rejected — use an empty list <code>[]</code> to match all messages</li>
+<li><strong>Non-string, non-callable</strong> filter items (e.g., <code>int</code>, <code>None</code>) are rejected</li>
+<li><strong>Classes</strong> passed as filter items (e.g., <code>{ValueError: [TypeError]}</code>) are rejected — use a lambda instead</li>
+<li><strong>Keys</strong> must be <code>Exception</code> subclasses</li>
+<li><strong>Values</strong> must be lists</li>
+</ul>
+<div class="highlight"><pre><span></span><code><span class="c1"># ❌ WRONG — empty string raises TypeError at init</span>
 <span class="n">exceptions_dict</span> <span class="o">=</span> <span class="p">{</span><span class="ne">ValueError</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;&quot;</span><span class="p">]}</span>
+
+<span class="c1"># ❌ WRONG — class passed as filter raises TypeError at init</span>
+<span class="n">exceptions_dict</span> <span class="o">=</span> <span class="p">{</span><span class="ne">ValueError</span><span class="p">:</span> <span class="p">[</span><span class="ne">TypeError</span><span class="p">]}</span>
 
 <span class="c1"># ✅ CORRECT — empty list means &quot;match all messages&quot;</span>
 <span class="n">exceptions_dict</span> <span class="o">=</span> <span class="p">{</span><span class="ne">ValueError</span><span class="p">:</span> <span class="p">[]}</span>
+
+<span class="c1"># ✅ CORRECT — callable filter</span>
+<span class="n">exceptions_dict</span> <span class="o">=</span> <span class="p">{</span><span class="ne">ValueError</span><span class="p">:</span> <span class="p">[</span><span class="k">lambda</span> <span class="n">exc</span><span class="p">:</span> <span class="s2">&quot;retry&quot;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">)]}</span>
 </code></pre></div>
 
 <h2 id="troubleshooting">Troubleshooting</h2>
@@ -438,19 +522,29 @@
 <td>Verify the exact exception message text and case</td>
 </tr>
 <tr>
+<td>Callable filter not working</td>
+<td>The callable raises an error (e.g., accessing a missing attribute)</td>
+<td>Check logs for "treating as non-matching" warnings; fix the callable</td>
+</tr>
+<tr>
+<td><code>TypeError</code> raised at init</td>
+<td>Invalid <code>exceptions_dict</code> format (empty string, non-callable item, class as filter)</td>
+<td>See <a href="#input-validation">Input Validation</a> for valid formats</td>
+</tr>
+<tr>
 <td><code>TimeoutExpiredError</code> raised immediately despite exception being in dict</td>
-<td>The exception message doesn't contain any of the specified substrings</td>
-<td>Use <code>[]</code> to ignore all messages, or add the correct substring</td>
+<td>No filter in the list matches (neither substring nor callable)</td>
+<td>Use <code>[]</code> to ignore all messages, or add the correct filter</td>
 </tr>
 </tbody>
 </table>
 <h2 id="related-pages">Related Pages</h2>
 <ul>
 <li><a href="exception-matching-logic.html">How Exception Matching Works</a></li>
+<li><a href="callable-exception-filters.html">Using Callable Exception Filters</a></li>
 <li><a href="api-exceptions.html">TimeoutExpiredError Reference</a></li>
 <li><a href="polling-with-timeout-sampler.html">Polling a Function with TimeoutSampler</a></li>
 <li><a href="using-the-retry-decorator.html">Retrying Functions with the @retry Decorator</a></li>
-<li><a href="api-timeout-sampler.html">TimeoutSampler API</a></li>
 </ul>
                 </div>
             </article>
@@ -480,16 +574,18 @@
 <li><a href="#step-by-step-common-use-cases">Step-by-Step: Common Use Cases</a><ul>
 <li><a href="#1-ignore-a-specific-exception-type">1. Ignore a Specific Exception Type</a></li>
 <li><a href="#2-match-by-message-text">2. Match by Message Text</a></li>
-<li><a href="#3-handle-multiple-exception-types">3. Handle Multiple Exception Types</a></li>
-<li><a href="#4-re-raise-all-exceptions-no-filtering">4. Re-raise All Exceptions (No Filtering)</a></li>
-<li><a href="#5-use-with-the-retry-decorator">5. Use with the @retry Decorator</a></li>
+<li><a href="#3-match-with-a-callable-filter">3. Match with a Callable Filter</a></li>
+<li><a href="#4-combine-string-and-callable-filters">4. Combine String and Callable Filters</a></li>
+<li><a href="#5-handle-multiple-exception-types">5. Handle Multiple Exception Types</a></li>
+<li><a href="#6-re-raise-all-exceptions-no-filtering">6. Re-raise All Exceptions (No Filtering)</a></li>
+<li><a href="#7-use-with-the-retry-decorator">7. Use with the @retry Decorator</a></li>
 </ul>
 </li>
 <li><a href="#advanced-usage">Advanced Usage</a><ul>
 <li><a href="#inheritance-aware-matching">Inheritance-Aware Matching</a></li>
 <li><a href="#three-outcome-categories">Three Outcome Categories</a></li>
 <li><a href="#accessing-the-original-exception-after-timeout">Accessing the Original Exception After Timeout</a></li>
-<li><a href="#empty-strings-in-message-lists">Empty Strings in Message Lists</a></li>
+<li><a href="#input-validation">Input Validation</a></li>
 </ul>
 </li>
 <li><a href="#troubleshooting">Troubleshooting</a></li>
@@ -505,7 +601,7 @@
 
         <footer class="page-footer">
 
-            <span class="footer-version">Generated from version 1.0.22</span>
+            <span class="footer-version">Generated from version 1.1.0</span>
             <span class="footer-sep">&middot;</span>
 
             Generated with <a href="https://github.com/myk-org/docsfy" target="_blank" rel="noopener">docs<span class="brand-accent">fy</span></a>

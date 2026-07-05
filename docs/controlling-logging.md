@@ -61,7 +61,7 @@ Elapsed time: 5.002 [0:00:05.002000]
 
 ### 2. Hide arguments only
 
-When function arguments contain secrets or are too verbose:
+When function arguments are too verbose:
 
 ```python
 sampler = TimeoutSampler(
@@ -82,6 +82,8 @@ Elapsed time: 5.002 [0:00:05.002000]
 ```
 
 The function name and module are still logged, but `Args` and `Kwargs` are omitted.
+
+> **Tip:** If you want to keep argument logging but hide sensitive values like passwords or tokens, use the `sensitive_keys` parameter instead of disabling arguments entirely. See [Automatic Sensitive Key Redaction](#automatic-sensitive-key-redaction) below.
 
 ### 3. Hide function details entirely
 
@@ -202,6 +204,57 @@ for sample in TimeoutSampler(
 
 The log will show the resolved underlying function name rather than `functools.partial`.
 
+### Automatic Sensitive Key Redaction
+
+When `print_func_args=True` (the default), `TimeoutSampler` automatically redacts values for common sensitive keyword argument keys before logging. Redacted values appear as `"***"` in the log output.
+
+The default sensitive keys are: `authorization`, `token`, `access_token`, `password`, `secret`, `api_key`, and `apikey`. Matching is **case-insensitive** and **exact** — a key like `nextPageToken` is *not* redacted because it doesn't exactly match `token`.
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=make_request,
+    headers={"Authorization": "Bearer my-secret-token"},
+):
+    if sample:
+        break
+# Log output: Kwargs: {'headers': {'Authorization': '***'}}
+```
+
+Redaction works recursively through nested dicts, lists, and tuples.
+
+#### Adding custom sensitive keys
+
+Pass `sensitive_keys` to add your own keys. Custom keys are **merged** with the defaults — they don't replace them:
+
+```python
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=call_api,
+    sensitive_keys=frozenset({"x-custom-secret"}),
+    headers={"Authorization": "Bearer token", "x-custom-secret": "value"}, # pragma: allowlist secret
+):
+    if sample:
+        break
+# Both "Authorization" and "x-custom-secret" values are redacted
+```
+
+The `sensitive_keys` parameter accepts `frozenset[str]` or `set[str]`. Passing an empty `frozenset()` still uses the default keys.
+
+> **Warning:** `sensitive_keys` must contain only strings. Passing non-string elements raises `TypeError` at construction time.
+
+The `sensitive_keys` parameter is also available on the `@retry` decorator:
+
+```python
+from timeout_sampler import retry
+
+@retry(wait_timeout=30, sleep=5, sensitive_keys=frozenset({"x-api-secret"}))
+def fetch_data(x_api_secret):
+    return requests.get("https://api.example.com", headers={"x-api-secret": x_api_secret}).ok
+```
+
 ### Selective Logging in Test Suites
 
 When writing tests, suppress logging to keep test output clean:
@@ -225,6 +278,9 @@ The `print_func_args` parameter controls argument visibility in both the log out
 **I want to customize the logger itself**
 `timeout-sampler` uses `python-simple-logger` for its logging backend. The log parameters described on this page control *what* is logged, not *where* or *how*. To configure log levels, formats, or destinations, refer to `python-simple-logger` documentation.
 
+**Sensitive values still appear in logs**
+Redaction only applies to dict keys that exactly match (case-insensitive) a known sensitive key. If your secret is under a non-standard key name, add it via `sensitive_keys=frozenset({"my_key"})`. Redaction applies to kwargs, positional args containing dicts, and nested structures.
+
 ## Related Pages
 
 - [TimeoutSampler API](api-timeout-sampler.html)
@@ -232,3 +288,11 @@ The `print_func_args` parameter controls argument visibility in both the log out
 - [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
 - [@retry Decorator API](api-retry-decorator.html)
 - [TimeoutExpiredError Reference](api-exceptions.html)
+
+## Related Pages
+
+- [Redacting Sensitive Data from Log Output](sensitive-key-redaction.html)
+- [TimeoutSampler API](api-timeout-sampler.html)
+- [Polling a Function with TimeoutSampler](polling-with-timeout-sampler.html)
+- [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html)
+- [@retry Decorator API](api-retry-decorator.html)
