@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import functools
+import sys
 import time
 from collections.abc import Callable
 from typing import Any
@@ -100,6 +101,8 @@ class TimeoutSampler:
         sensitive_keys (frozenset[str] | set[str] | None): Additional keys to redact from logged kwargs (case-insensitive exact match).
             Merged with the default sensitive keys (authorization, token, access_token, password, secret, api_key, apikey).
             Note: "token" matches any key named exactly "token" (any case) — keys like "nextPageToken" are not affected.
+        log_context (str): Outcome label for success, non-retried exception or timeout. Retries are not logged.
+            When empty, the function name is used as the label.
     """
 
     _MAX_REDACT_DEPTH: int = 20
@@ -124,6 +127,7 @@ class TimeoutSampler:
         print_func_log: bool = True,
         print_func_args: bool = True,
         sensitive_keys: frozenset[str] | set[str] | None = None,
+        log_context: str = "",
         func_args: tuple[Any] | None = None,
         **func_kwargs: Any,
     ):
@@ -142,6 +146,7 @@ class TimeoutSampler:
             self.sensitive_keys = self._DEFAULT_SENSITIVE_KEYS | frozenset(key.lower() for key in sensitive_keys)
         else:
             self.sensitive_keys = self._DEFAULT_SENSITIVE_KEYS
+        self.log_context = log_context
         self.exceptions_dict = self._validate_exceptions_dict(
             exceptions_dict=exceptions_dict if exceptions_dict is not None else {Exception: []}
         )
@@ -250,6 +255,12 @@ class TimeoutSampler:
         _func_name = self._get_func_info(_func=self.func, type_="__name__")
         return f"Function: {_func_module}.{_func_name} {_func_args} {_func_kwargs}".strip()
 
+    def _log_label(self) -> str:
+        return self.log_context or self._get_func_info(_func=self.func, type_="__name__") or "sampler"
+
+    def _outcome_log(self, elapsed_time: float, outcome: str) -> str:
+        return f"{self._log_label()} {outcome} after {elapsed_time:.1f}s."
+
     def __iter__(self) -> Any:
         """
         Call `func` and yield the result, or raise an exception on timeout.
@@ -288,17 +299,29 @@ class TimeoutSampler:
 
                 if not self._should_ignore_exception(exp=last_exp):
                     raise TimeoutExpiredError(
-                        self._get_exception_log(exp=last_exp), last_exp=last_exp, elapsed_time=elapsed_time
+                        self._get_exception_log(exp=last_exp),
+                        last_exp=last_exp,
+                        elapsed_time=elapsed_time,
                     )
 
                 time.sleep(self.sleep)
                 elapsed_time = None
 
             finally:
-                if self.print_log and elapsed_time:
-                    LOGGER.info(_elapsed_time_log(elapsed_time=elapsed_time))
+                if self.print_log and elapsed_time is not None:
+                    if sys.exc_info()[0] is GeneratorExit:
+                        LOGGER.success(self._outcome_log(elapsed_time=elapsed_time, outcome="succeeded"))
+                    else:
+                        LOGGER.error(f"{self._outcome_log(elapsed_time=elapsed_time, outcome='failed')}: {last_exp}")
 
-        raise TimeoutExpiredError(self._get_exception_log(exp=last_exp), last_exp=last_exp)
+        timeout_elapsed = self.wait_timeout - timeout_watch.remaining_time()
+        if self.print_log:
+            LOGGER.error(f"{self._outcome_log(elapsed_time=timeout_elapsed, outcome='timed out')}: {last_exp}")
+        raise TimeoutExpiredError(
+            self._get_exception_log(exp=last_exp),
+            last_exp=last_exp,
+            elapsed_time=timeout_elapsed,
+        )
 
     @staticmethod
     def _is_exception_matched(exp: Exception, exception_filters: list[ExceptionFilter]) -> bool:
@@ -400,6 +423,7 @@ def retry(
     print_func_log: bool = True,
     print_func_args: bool = True,
     sensitive_keys: frozenset[str] | set[str] | None = None,
+    log_context: str = "",
 ) -> Callable:
     """
     Decorator for TimeoutSampler, For usage see TimeoutSampler.
@@ -413,6 +437,8 @@ def retry(
         print_func_args (bool): Include function arguments in log
         sensitive_keys (frozenset[str] | set[str] | None): Additional keys to redact from logged kwargs (case-insensitive exact match).
             Merged with the default sensitive keys.
+        log_context (str): Outcome label for success, non-retried exception or timeout. Retries are not logged.
+            When empty, the function name is used as the label.
 
     Returns:
         Callable: The decorated function that will be retried on failure.
@@ -441,6 +467,7 @@ def retry(
                 print_func_log=print_func_log,
                 print_func_args=print_func_args,
                 sensitive_keys=sensitive_keys,
+                log_context=log_context,
                 func_args=args,
                 **kwargs,
             ):

@@ -124,11 +124,44 @@ for sample in TimeoutSampler(
         break
 
 
+# wait_for_ssh must return a truthy value when SSH is reachable.
+def wait_for_ssh(host):
+    return check_ssh(host)  # raises ConnectionError while SSH is down
+
+# When print_log=True (default), each finished wait logs one outcome line:
+#   {label} succeeded after 12.3s.
+#   {label} failed after 3.1s: ...
+#   {label} timed out after 60.0s: ...
+# The label is log_context when set, otherwise the function name (e.g. random_number).
+# Retried exceptions are not logged.
+
+# Use log_context for a custom outcome label instead of the function name.
+for sample in TimeoutSampler(
+    wait_timeout=60,
+    sleep=1,
+    func=wait_for_ssh,
+    host="my-vm",
+    log_context="SSH connectivity to my-vm",
+    exceptions_dict={ConnectionError: []},
+):
+    if sample:
+        break
+# On success: "SSH connectivity to my-vm succeeded after 12.3s."
+# On non-retried error: "SSH connectivity to my-vm failed after 3.1s: ..."
+# On timeout: "SSH connectivity to my-vm timed out after 60.0s: ..."
+
+
 # Use as decorator. (Any argument that TimeoutSampler accepts will be passed to the decorated function)
 from timeout_sampler import retry
 
+@retry(wait_timeout=60, sleep=1, log_context="SSH connectivity to my-vm", exceptions_dict={ConnectionError: []})
+def wait_for_ssh(host):
+    return check_ssh(host)  # truthy when SSH is up; raises ConnectionError otherwise
+
+
 @retry(wait_timeout=60, sleep=1)
 def random_number(start, end):
+    # Outcome line uses the function name: "random_number succeeded after 12.3s."
     if isinstance(start, str) or isinstance(end, str):
       raise TypeError("start and end must be int type")
 
