@@ -209,7 +209,7 @@ def test_log_context_logs_success_when_elapsed_time_is_zero(caplog, monkeypatch)
         if sample:
             break
 
-    assert "SSH connectivity to test-vm succeeded after 0.0s." in caplog.text
+    assert "SSH connectivity to test-vm succeeded after 0.0 [0:00:00]." in caplog.text
 
 
 def test_log_context_logs_non_retried_exception(caplog):
@@ -228,7 +228,7 @@ def test_log_context_logs_non_retried_exception(caplog):
             continue
 
     assert "SSH connectivity to test-vm failed after" in caplog.text
-    assert "unexpected" in caplog.text
+    assert "[last exception: unexpected]" in caplog.text
     assert "Elapsed time:" not in caplog.text
     assert error_info.value.elapsed_time is not None
     assert error_info.value.last_exp is not None
@@ -247,7 +247,7 @@ def test_log_context_logs_timeout_with_elapsed_time_on_exception(caplog):
             continue
 
     assert "SSH connectivity to test-vm timed out after" in caplog.text
-    assert "ssh down" in caplog.text
+    assert "[last exception: ssh down]" in caplog.text
     assert "succeeded after" not in caplog.text
     assert "Elapsed time:" not in caplog.text
     assert error_info.value.elapsed_time is not None
@@ -282,10 +282,27 @@ def test_without_log_context_uses_func_name_on_failure(caplog):
         ):
             continue
 
-    assert "always_fails failed after" in caplog.text
-    assert "unexpected" in caplog.text
+    assert "Function: tests.test_timeout_sampler.always_fails failed after" in caplog.text
+    assert "[last exception: unexpected]" in caplog.text
     assert "Elapsed time:" not in caplog.text
     assert error_info.value.elapsed_time is not None
+
+
+def test_without_log_context_uses_module_qualified_name_on_success(caplog):
+    def ready():
+        return True
+
+    for sample in TimeoutSampler(
+        wait_timeout=2,
+        sleep=0,
+        func=ready,
+        print_func_log=False,
+    ):
+        if sample:
+            break
+
+    assert "Function: tests.test_timeout_sampler.ready succeeded after" in caplog.text
+    assert "Elapsed time:" not in caplog.text
 
 
 def test_without_log_context_uses_lambda_label_on_success(caplog):
@@ -298,7 +315,7 @@ def test_without_log_context_uses_lambda_label_on_success(caplog):
         if sample:
             break
 
-    assert "lambda:" in caplog.text
+    assert "Function: lambda:" in caplog.text
     assert "succeeded after" in caplog.text
 
 
