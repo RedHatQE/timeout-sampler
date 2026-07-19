@@ -330,8 +330,9 @@ def test_without_log_context_uses_lambda_label_on_success(caplog):
         if sample:
             break
 
-    assert "Function: lambda:" in caplog.text
-    assert "succeeded after" in caplog.text
+    assert "Function: lambda succeeded after" in caplog.text
+    assert "Function: lambda:  " not in caplog.text
+    assert "Elapsed time:" not in caplog.text
 
 
 def test_partial_lambda_uses_lambda_label_on_success(caplog):
@@ -346,8 +347,8 @@ def test_partial_lambda_uses_lambda_label_on_success(caplog):
         if sample:
             break
 
-    assert "Function: lambda:" in caplog.text
-    assert "succeeded after" in caplog.text
+    assert "Function: lambda succeeded after" in caplog.text
+    assert "Function: lambda:  " not in caplog.text
 
 
 def test_sampler_negative():

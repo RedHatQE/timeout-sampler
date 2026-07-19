@@ -207,7 +207,8 @@ class TimeoutSampler:
                 elif type_ == "__name__":
                     free_vars = _func.__code__.co_freevars
                     free_vars_str = f"{'.'.join(free_vars)}." if free_vars else ""
-                    return f"lambda: {free_vars_str}{'.'.join(_func.__code__.co_names)}"
+                    label = f"lambda: {free_vars_str}{'.'.join(_func.__code__.co_names)}".rstrip(" .")
+                    return label if label != "lambda:" else "lambda"
             return res
 
     def _redact(self, data: Any, _depth: int = 0) -> Any:
@@ -265,7 +266,7 @@ class TimeoutSampler:
 
         # Lambdas already encode identity in __name__ (e.g. "lambda: True").
         # Use resolved _func_name so functools.partial(lambda…) still matches.
-        if _func_name.startswith("lambda:"):
+        if _func_name.startswith("lambda:") or _func_name == "lambda":
             return f"Function: {_func_name}"
 
         # Match waiting-log identity: module.name (same as _func_log without Args/Kwargs).

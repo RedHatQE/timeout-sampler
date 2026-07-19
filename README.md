@@ -133,6 +133,9 @@ def wait_for_ssh(host):
 #   {label} succeeded after 12.3 [0:00:12.300000].
 #   {label} failed after 3.1 [0:00:03.100000]. [last exception: ...]
 #   {label} timed out after 60.0 [0:01:00]. [last exception: ...]
+#   {label} timed out after 60.0 [0:01:00].
+# The [last exception: ...] suffix is only added when an exception was captured
+# (omitted for timeouts caused by repeated falsy returns with no raise).
 # The label is log_context when set, otherwise "Function: module.function"
 # (same Function: marker as the waiting log). Retried exceptions are not logged.
 
@@ -149,7 +152,8 @@ for sample in TimeoutSampler(
         break
 # On success: "SSH connectivity to my-vm succeeded after 12.3 [0:00:12.300000]."
 # On non-retried error: "SSH connectivity to my-vm failed after 3.1 [0:00:03.100000]. [last exception: ...]"
-# On timeout: "SSH connectivity to my-vm timed out after 60.0 [0:01:00]. [last exception: ...]"
+# On timeout with last exception: "… timed out after 60.0 [0:01:00]. [last exception: ...]"
+# On timeout with no exception (falsy returns): "… timed out after 60.0 [0:01:00]."
 
 
 # Use as decorator. (Any argument that TimeoutSampler accepts will be passed to the decorated function)
