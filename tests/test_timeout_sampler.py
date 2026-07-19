@@ -254,6 +254,21 @@ def test_log_context_logs_timeout_with_elapsed_time_on_exception(caplog):
     assert error_info.value.last_exp is not None
 
 
+def test_timeout_without_exception_omits_last_exception_suffix(caplog):
+    with pytest.raises(TimeoutExpiredError) as error_info:
+        for _ in TimeoutSampler(
+            wait_timeout=1,
+            sleep=0.2,
+            func=lambda: False,
+            print_func_log=False,
+        ):
+            continue
+
+    assert "timed out after" in caplog.text
+    assert "[last exception:" not in caplog.text
+    assert error_info.value.last_exp is None
+
+
 def test_without_log_context_uses_func_name_on_success(caplog):
     for sample in TimeoutSampler(
         wait_timeout=2,
@@ -310,6 +325,22 @@ def test_without_log_context_uses_lambda_label_on_success(caplog):
         wait_timeout=2,
         sleep=0,
         func=lambda: True,
+        print_func_log=False,
+    ):
+        if sample:
+            break
+
+    assert "Function: lambda:" in caplog.text
+    assert "succeeded after" in caplog.text
+
+
+def test_partial_lambda_uses_lambda_label_on_success(caplog):
+    import functools
+
+    for sample in TimeoutSampler(
+        wait_timeout=2,
+        sleep=0,
+        func=functools.partial(lambda: True),
         print_func_log=False,
     ):
         if sample:

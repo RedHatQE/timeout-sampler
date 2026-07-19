@@ -264,7 +264,8 @@ class TimeoutSampler:
             return "Function: sampler"
 
         # Lambdas already encode identity in __name__ (e.g. "lambda: True").
-        if getattr(self.func, "__name__", None) == "<lambda>":
+        # Use resolved _func_name so functools.partial(lambda…) still matches.
+        if _func_name.startswith("lambda:"):
             return f"Function: {_func_name}"
 
         # Match waiting-log identity: module.name (same as _func_log without Args/Kwargs).
@@ -281,7 +282,7 @@ class TimeoutSampler:
         last_exp: Exception | None = None,
     ) -> str:
         msg = f"{self._log_label()} {outcome} after {elapsed_time} [{datetime.timedelta(seconds=elapsed_time)}]."
-        if outcome != "succeeded":
+        if outcome != "succeeded" and last_exp is not None:
             msg += f" [last exception: {last_exp}]"
         return msg
 
