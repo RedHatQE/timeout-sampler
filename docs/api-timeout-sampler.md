@@ -31,7 +31,7 @@ TimeoutSampler(
 | `sleep` | `int` | *(required)* | Time in seconds to sleep between successive calls to `func`. |
 | `func` | `Callable` | *(required)* | The function to poll. Called as `func(*func_args, **func_kwargs)` on each iteration. |
 | `exceptions_dict` | `ExceptionsDict \| None` | `None` | Map of exception types to filter lists. Filters can be strings (matched as substrings of `str(exception)`) or callables (invoked with the exception instance, returning truthy to ignore). When `None`, defaults to `{Exception: []}` (all exceptions ignored). See [How Exception Matching Works](exception-matching-logic.html). |
-| `print_log` | `bool` | `True` | Log elapsed time on each iteration and print a summary line at the start. |
+| `print_log` | `bool` | `True` | Log a startup "Waiting for…" message and a final outcome line (succeeded / failed / timed out). |
 | `print_func_log` | `bool` | `True` | Include function module and name in the startup log message. |
 | `print_func_args` | `bool` | `True` | Include `func_args` and `func_kwargs` in the log when `print_func_log` is `True`. |
 | `sensitive_keys` | `frozenset[str] \| set[str] \| None` | `None` | Additional keys to redact from logged kwargs (case-insensitive exact match). Merged with the built-in default sensitive keys. See [Sensitive Key Redaction](#sensitive-key-redaction). |
@@ -370,7 +370,7 @@ Logging is emitted via `simple_logger` at `INFO` level.
 
 | Flag | Default | Effect when `True` |
 |---|---|---|
-| `print_log` | `True` | Logs a startup message with wait/sleep times and logs elapsed time after each iteration where `func` raises an exception or after yield. |
+| `print_log` | `True` | Logs a startup message with wait/sleep times and a final outcome line (`… succeeded/failed/timed out after …`). Fail/timeout lines include `[last exception: …]` only when an exception was captured. |
 | `print_func_log` | `True` | Appends function module and name to the startup log message. Requires `print_log=True`. |
 | `print_func_args` | `True` | Includes `Args` and `Kwargs` in the function log (with sensitive values redacted). Requires `print_func_log=True`. |
 

@@ -165,7 +165,7 @@ For full details on exception filtering, see [Filtering and Handling Exceptions]
 
 | Parameter         | Type   | Default | Effect                                              |
 |-------------------|--------|---------|-----------------------------------------------------|
-| `print_log`       | `bool` | `True`  | Log elapsed time on each iteration                  |
+| `print_log`       | `bool` | `True`  | Log startup wait line and final outcome line        |
 | `print_func_log`  | `bool` | `True`  | Include function name and module in log messages     |
 | `print_func_args` | `bool` | `True`  | Include function arguments in log (when `print_func_log` is `True`) |
 

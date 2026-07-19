@@ -95,8 +95,8 @@ class TimeoutSampler:
             (using isinstance). Values are lists of filters — strings (matched against str(exception)) or
             callables (invoked with the exception, returning True to ignore/retry). An empty list ignores
             all instances of that exception. See the format example above.
-        print_log (bool): Print elapsed time to log.
-        print_func_log (bool): Add function call info to log
+        print_log (bool): Log the startup waiting line and a final outcome line (succeeded / failed / timed out).
+        print_func_log (bool): Add function call info to the startup waiting log
         print_func_args (bool): Include function arguments in log when print_func_log is True
         sensitive_keys (frozenset[str] | set[str] | None): Additional keys to redact from logged kwargs (case-insensitive exact match).
             Merged with the default sensitive keys (authorization, token, access_token, password, secret, api_key, apikey).
@@ -458,8 +458,8 @@ def retry(
         wait_timeout (int): Time in seconds to wait for func to return a value equating to True
         sleep (int): Time in seconds between calls to func
         exceptions_dict (dict): Exception handling definition
-        print_log (bool): Print elapsed time to log
-        print_func_log (bool): Add function call info to log
+        print_log (bool): Log the startup waiting line and a final outcome line
+        print_func_log (bool): Add function call info to the startup waiting log
         print_func_args (bool): Include function arguments in log
         sensitive_keys (frozenset[str] | set[str] | None): Additional keys to redact from logged kwargs (case-insensitive exact match).
             Merged with the default sensitive keys.

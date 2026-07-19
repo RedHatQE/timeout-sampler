@@ -149,7 +149,7 @@ See [Filtering and Handling Exceptions](handling-exceptions.html) for the full i
 
 | Parameter         | Default | Effect                                                 |
 |-------------------|---------|--------------------------------------------------------|
-| `print_log`       | `True`  | Log elapsed time on each iteration                     |
+| `print_log`       | `True`  | Log startup wait line and final outcome line          |
 | `print_func_log`  | `True`  | Include function name and module in log messages       |
 | `print_func_args` | `True`  | Include `args`/`kwargs` in the function log            |
 

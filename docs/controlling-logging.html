@@ -276,7 +276,7 @@
 
 <p>Log output:</p>
 <div class="highlight"><pre><span></span><code>Waiting for 60 seconds [0:01:00], retry every 5 seconds. (Function: myapp.health.check_service Args: (&#39;https://api.example.com&#39;,) Kwargs: {&#39;retries&#39;: 3})
-Elapsed time: 5.002 [0:00:05.002000]
+Function: myapp.health.check_service succeeded after 5.002 [0:00:05.002000].
 </code></pre></div>
 
 <h3 id="2-hide-arguments-only">2. Hide arguments only</h3>
@@ -293,7 +293,7 @@ Elapsed time: 5.002 [0:00:05.002000]
 
 <p>Log output:</p>
 <div class="highlight"><pre><span></span><code>Waiting for 60 seconds [0:01:00], retry every 5 seconds. (Function: myapp.health.check_service)
-Elapsed time: 5.002 [0:00:05.002000]
+Function: myapp.health.check_service succeeded after 5.002 [0:00:05.002000].
 </code></pre></div>
 
 <p>The function name and module are still logged, but <code>Args</code> and <code>Kwargs</code> are omitted.</p>
@@ -312,7 +312,7 @@ Elapsed time: 5.002 [0:00:05.002000]
 
 <p>Log output:</p>
 <div class="highlight"><pre><span></span><code>Waiting for 60 seconds [0:01:00], retry every 5 seconds.
-Elapsed time: 5.002 [0:00:05.002000]
+Function: myapp.health.check_service succeeded after 5.002 [0:00:05.002000].
 </code></pre></div>
 
 <blockquote>
@@ -328,7 +328,7 @@ Elapsed time: 5.002 [0:00:05.002000]
 <span class="p">)</span>
 </code></pre></div>
 
-<p>No log output is produced at all — neither the initial "Waiting for…" message nor the per-iteration elapsed-time lines.</p>
+<p>No log output is produced at all — neither the initial "Waiting for…" message nor the final outcome line.</p>
 <h2 id="using-with-the-retry-decorator">Using with the @retry Decorator</h2>
 <p>The same three parameters are available on the <code>@retry</code> decorator:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">timeout_sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">retry</span>
@@ -351,7 +351,7 @@ Elapsed time: 5.002 [0:00:05.002000]
 <th>"Waiting for…" line</th>
 <th>Function name in log</th>
 <th>Args/Kwargs in log</th>
-<th>Elapsed time lines</th>
+<th>Final outcome line</th>
 </tr>
 </thead>
 <tbody>
