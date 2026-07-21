@@ -1,6 +1,6 @@
 # Controlling Log Output
 
-When debugging polling loops or running in production, you may want to control how much logging `timeout-sampler` produces. Three boolean parameters — `print_log`, `print_func_log`, and `print_func_args` — let you toggle elapsed-time messages, function-call details, and argument visibility independently.
+When debugging polling loops or running in production, you may want to control how much logging `timeout-sampler` produces. Three boolean parameters — `print_log`, `print_func_log`, and `print_func_args` — let you toggle the startup wait line, function-call details, and the final outcome line independently.
 
 ## Prerequisites
 
@@ -56,7 +56,7 @@ Log output:
 
 ```
 Waiting for 60 seconds [0:01:00], retry every 5 seconds. (Function: myapp.health.check_service Args: ('https://api.example.com',) Kwargs: {'retries': 3})
-Elapsed time: 5.002 [0:00:05.002000]
+Function: myapp.health.check_service succeeded after 5.002 [0:00:05.002000].
 ```
 
 ### 2. Hide arguments only
@@ -78,7 +78,7 @@ Log output:
 
 ```
 Waiting for 60 seconds [0:01:00], retry every 5 seconds. (Function: myapp.health.check_service)
-Elapsed time: 5.002 [0:00:05.002000]
+Function: myapp.health.check_service succeeded after 5.002 [0:00:05.002000].
 ```
 
 The function name and module are still logged, but `Args` and `Kwargs` are omitted.
@@ -87,7 +87,7 @@ The function name and module are still logged, but `Args` and `Kwargs` are omitt
 
 ### 3. Hide function details entirely
 
-When you only care about timing:
+When you only care about wait timing and the final outcome (without embedding the function identity in the waiting line):
 
 ```python
 sampler = TimeoutSampler(
@@ -102,10 +102,12 @@ Log output:
 
 ```
 Waiting for 60 seconds [0:01:00], retry every 5 seconds.
-Elapsed time: 5.002 [0:00:05.002000]
+Function: myapp.health.check_service succeeded after 5.002 [0:00:05.002000].
 ```
 
-> **Tip:** Setting `print_func_log=False` also suppresses argument output, so you don't need to set `print_func_args=False` separately.
+> **Note:** The final outcome line still uses `Function: module.name` (or `log_context` when set). `print_func_log=False` only omits function details from the startup "Waiting for…" line.
+
+> **Tip:** Setting `print_func_log=False` also suppresses argument output on the waiting line, so you don't need to set `print_func_args=False` separately.
 
 ### 4. Silence all logging
 
@@ -120,7 +122,7 @@ sampler = TimeoutSampler(
 )
 ```
 
-No log output is produced at all — neither the initial "Waiting for…" message nor the per-iteration elapsed-time lines.
+No log output is produced at all — neither the initial "Waiting for…" message nor the final outcome line.
 
 ## Using with the @retry Decorator
 
@@ -135,13 +137,13 @@ def fetch_data(api_key):
     return response.ok
 ```
 
-This logs the function name and elapsed time but omits the `api_key` argument from log output.
+This logs the function name on the waiting line and a final outcome line, but omits the `api_key` argument from log output.
 
 See [Retrying Functions with the @retry Decorator](using-the-retry-decorator.html) for full decorator usage.
 
 ## Parameter Combination Reference
 
-| `print_log` | `print_func_log` | `print_func_args` | "Waiting for…" line | Function name in log | Args/Kwargs in log | Elapsed time lines |
+| `print_log` | `print_func_log` | `print_func_args` | "Waiting for…" line | Function name in waiting log | Args/Kwargs in waiting log | Final outcome line |
 |---|---|---|---|---|---|---|
 | `True`  | `True`  | `True`  | ✅ | ✅ | ✅ | ✅ |
 | `True`  | `True`  | `False` | ✅ | ✅ | ❌ | ✅ |
@@ -270,7 +272,7 @@ def wait_for_ready():
 ## Troubleshooting
 
 **Logs appear even though I set `print_func_log=False`**
-The elapsed-time lines are controlled by `print_log`, not `print_func_log`. Set `print_log=False` to suppress all output, or leave `print_log=True` to keep only the timing information.
+The startup waiting line and final outcome line are controlled by `print_log`, not `print_func_log`. Set `print_log=False` to suppress all output. With `print_log=True` and `print_func_log=False`, you still get the waiting line (without function details) and the final outcome line.
 
 **Arguments still appear in `TimeoutExpiredError` messages**
 The `print_func_args` parameter controls argument visibility in both the log output *and* the exception message. Verify that `print_func_args=False` is set on the `TimeoutSampler` or `@retry` call that raises the error.

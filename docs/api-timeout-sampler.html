@@ -269,7 +269,7 @@
 <td><code>print_log</code></td>
 <td><code>bool</code></td>
 <td><code>True</code></td>
-<td>Log elapsed time on each iteration and print a summary line at the start.</td>
+<td>Log a startup "Waiting for…" message and a final outcome line (succeeded / failed / timed out).</td>
 </tr>
 <tr>
 <td><code>print_func_log</code></td>
@@ -683,7 +683,7 @@
 <tr>
 <td><code>print_log</code></td>
 <td><code>True</code></td>
-<td>Logs a startup message with wait/sleep times and logs elapsed time after each iteration where <code>func</code> raises an exception or after yield.</td>
+<td>Logs a startup message with wait/sleep times and a final outcome line (<code>… succeeded/failed/timed out after …</code>). Fail/timeout lines include <code>[last exception: …]</code> only when an exception was captured.</td>
 </tr>
 <tr>
 <td><code>print_func_log</code></td>

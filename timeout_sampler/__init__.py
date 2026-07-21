@@ -95,14 +95,14 @@ class TimeoutSampler:
             (using isinstance). Values are lists of filters — strings (matched against str(exception)) or
             callables (invoked with the exception, returning True to ignore/retry). An empty list ignores
             all instances of that exception. See the format example above.
-        print_log (bool): Print elapsed time to log.
-        print_func_log (bool): Add function call info to log
+        print_log (bool): Log the startup waiting line and a final outcome line (succeeded / failed / timed out).
+        print_func_log (bool): Add function call info to the startup waiting log
         print_func_args (bool): Include function arguments in log when print_func_log is True
         sensitive_keys (frozenset[str] | set[str] | None): Additional keys to redact from logged kwargs (case-insensitive exact match).
             Merged with the default sensitive keys (authorization, token, access_token, password, secret, api_key, apikey).
             Note: "token" matches any key named exactly "token" (any case) — keys like "nextPageToken" are not affected.
         log_context (str): Outcome label for success, non-retried exception or timeout. Retries are not logged.
-            When empty, the function name is used as the label.
+            When empty, ``Function: module.function`` is used as the label (matching the waiting-log identity).
     """
 
     _MAX_REDACT_DEPTH: int = 20
@@ -207,7 +207,8 @@ class TimeoutSampler:
                 elif type_ == "__name__":
                     free_vars = _func.__code__.co_freevars
                     free_vars_str = f"{'.'.join(free_vars)}." if free_vars else ""
-                    return f"lambda: {free_vars_str}{'.'.join(_func.__code__.co_names)}"
+                    label = f"lambda: {free_vars_str}{'.'.join(_func.__code__.co_names)}".rstrip(" .")
+                    return label if label != "lambda:" else "lambda"
             return res
 
     def _redact(self, data: Any, _depth: int = 0) -> Any:
@@ -256,10 +257,35 @@ class TimeoutSampler:
         return f"Function: {_func_module}.{_func_name} {_func_args} {_func_kwargs}".strip()
 
     def _log_label(self) -> str:
-        return self.log_context or self._get_func_info(_func=self.func, type_="__name__") or "sampler"
+        if self.log_context:
+            return self.log_context
 
-    def _outcome_log(self, elapsed_time: float, outcome: str) -> str:
-        return f"{self._log_label()} {outcome} after {elapsed_time:.1f}s."
+        _func_name = self._get_func_info(_func=self.func, type_="__name__")
+        if not _func_name:
+            return "Function: sampler"
+
+        # Lambdas already encode identity in __name__ (e.g. "lambda: True").
+        # Use resolved _func_name so functools.partial(lambda…) still matches.
+        if _func_name.startswith("lambda:") or _func_name == "lambda":
+            return f"Function: {_func_name}"
+
+        # Match waiting-log identity: module.name (same as _func_log without Args/Kwargs).
+        # Skip __main__ — that is only the script entrypoint name, not a useful package path.
+        _func_module = self._get_func_info(_func=self.func, type_="__module__")
+        if _func_module and _func_module != "__main__":
+            return f"Function: {_func_module}.{_func_name}"
+        return f"Function: {_func_name}"
+
+    def _outcome_log(
+        self,
+        elapsed_time: float,
+        outcome: str,
+        last_exp: Exception | None = None,
+    ) -> str:
+        msg = f"{self._log_label()} {outcome} after {elapsed_time} [{datetime.timedelta(seconds=elapsed_time)}]."
+        if outcome != "succeeded" and last_exp is not None:
+            msg += f" [last exception: {last_exp}]"
+        return msg
 
     def __iter__(self) -> Any:
         """
@@ -312,11 +338,11 @@ class TimeoutSampler:
                     if sys.exc_info()[0] is GeneratorExit:
                         LOGGER.success(self._outcome_log(elapsed_time=elapsed_time, outcome="succeeded"))
                     else:
-                        LOGGER.error(f"{self._outcome_log(elapsed_time=elapsed_time, outcome='failed')}: {last_exp}")
+                        LOGGER.error(self._outcome_log(elapsed_time=elapsed_time, outcome="failed", last_exp=last_exp))
 
         timeout_elapsed = self.wait_timeout - timeout_watch.remaining_time()
         if self.print_log:
-            LOGGER.error(f"{self._outcome_log(elapsed_time=timeout_elapsed, outcome='timed out')}: {last_exp}")
+            LOGGER.error(self._outcome_log(elapsed_time=timeout_elapsed, outcome="timed out", last_exp=last_exp))
         raise TimeoutExpiredError(
             self._get_exception_log(exp=last_exp),
             last_exp=last_exp,
@@ -432,13 +458,13 @@ def retry(
         wait_timeout (int): Time in seconds to wait for func to return a value equating to True
         sleep (int): Time in seconds between calls to func
         exceptions_dict (dict): Exception handling definition
-        print_log (bool): Print elapsed time to log
-        print_func_log (bool): Add function call info to log
+        print_log (bool): Log the startup waiting line and a final outcome line
+        print_func_log (bool): Add function call info to the startup waiting log
         print_func_args (bool): Include function arguments in log
         sensitive_keys (frozenset[str] | set[str] | None): Additional keys to redact from logged kwargs (case-insensitive exact match).
             Merged with the default sensitive keys.
         log_context (str): Outcome label for success, non-retried exception or timeout. Retries are not logged.
-            When empty, the function name is used as the label.
+            When empty, ``Function: module.function`` is used as the label (matching the waiting-log identity).
 
     Returns:
         Callable: The decorated function that will be retried on failure.
