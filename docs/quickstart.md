@@ -37,6 +37,7 @@ Any callable works — a regular function, a lambda, or a method:
 ```python
 import random
 
+
 def check_service():
     """Simulate a service that becomes ready after a few attempts."""
     return random.random() > 0.7
@@ -46,8 +47,8 @@ def check_service():
 
 ```python
 sampler = TimeoutSampler(
-    wait_timeout=30,   # total seconds to wait
-    sleep=5,           # seconds between retries
+    wait_timeout=30,  # total seconds to wait
+    sleep=5,  # seconds between retries
     func=check_service,
 )
 
@@ -88,6 +89,7 @@ def is_ready(host, port):
     # ... check connection ...
     return True
 
+
 for sample in TimeoutSampler(
     wait_timeout=30,
     sleep=5,
@@ -106,10 +108,12 @@ For the common pattern of "poll until truthy, then return the value," the `@retr
 ```python
 from timeout_sampler import retry
 
+
 @retry(wait_timeout=10, sleep=2)
 def get_value():
     # return a truthy value when ready
     return True
+
 
 result = get_value()  # blocks until truthy or TimeoutExpiredError
 ```
@@ -158,7 +162,7 @@ for sample in TimeoutSampler(
     wait_timeout=10,
     sleep=2,
     func=check_service,
-    print_log=False,        # silence all log output
+    print_log=False,  # silence all log output
 ):
     if sample:
         break
@@ -172,7 +176,7 @@ for sample in TimeoutSampler(
     sleep=1,
     func=call_api,
     sensitive_keys=frozenset({"x-custom-secret"}),
-    headers={"Authorization": "Bearer token", "x-custom-secret": "value"}, # pragma: allowlist secret
+    headers={"Authorization": "Bearer token", "x-custom-secret": "value"},  # pragma: allowlist secret
 ):
     if sample:
         break

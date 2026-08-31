@@ -47,8 +47,8 @@ Creates a new `TimeoutWatch` instance. Records the current time as the start tim
 from timeout_sampler import TimeoutWatch
 
 watch = TimeoutWatch(timeout=30)
-print(watch.timeout)      # 30
-print(watch.start_time)   # e.g. 1750600000.123456
+print(watch.timeout)  # 30
+print(watch.start_time)  # e.g. 1750600000.123456
 ```
 
 ---

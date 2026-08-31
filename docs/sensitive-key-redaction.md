@@ -58,7 +58,7 @@ for sample in TimeoutSampler(
     sleep=1,
     func=call_api,
     sensitive_keys=frozenset({"x-custom-secret"}),
-    headers={"Authorization": "Bearer token", "x-custom-secret": "value"}, # pragma: allowlist secret
+    headers={"Authorization": "Bearer token", "x-custom-secret": "value"},  # pragma: allowlist secret
 ):
     if sample:
         break
@@ -79,6 +79,7 @@ The `@retry` decorator accepts the same parameter:
 ```python
 from timeout_sampler import retry
 
+
 @retry(
     wait_timeout=30,
     sleep=2,
@@ -87,6 +88,7 @@ from timeout_sampler import retry
 def fetch_data(headers=None, session_id=None):
     # Both headers containing default sensitive keys AND session_id will be redacted
     return make_request(headers=headers, session_id=session_id)
+
 
 fetch_data(
     headers={"Authorization": "Bearer abc123"},
@@ -122,7 +124,7 @@ TimeoutSampler(
     wait_timeout=10,
     sleep=1,
     func=process,
-    config={"database": {"password": "hunter2", "host": "db.example.com"}}, # pragma: allowlist secret
+    config={"database": {"password": "hunter2", "host": "db.example.com"}},  # pragma: allowlist secret
 )
 # Logged as: Kwargs: {'config': {'database': {'password': '***', 'host': 'db.example.com'}}}
 ```
@@ -166,7 +168,7 @@ TimeoutSampler(
     wait_timeout=10,
     sleep=1,
     func=process,
-    data={1: "int-key-value", "password": "secret123"}, # pragma: allowlist secret
+    data={1: "int-key-value", "password": "secret123"},  # pragma: allowlist secret
 )
 # Logged as: Kwargs: {'data': {1: 'int-key-value', 'password': '***'}}
 ```

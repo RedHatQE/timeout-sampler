@@ -32,8 +32,8 @@ Pass your function, a total timeout, and a sleep interval between polls:
 
 ```python
 sampler = TimeoutSampler(
-    wait_timeout=60,   # total seconds to wait
-    sleep=3,           # seconds between each call
+    wait_timeout=60,  # total seconds to wait
+    sleep=3,  # seconds between each call
     func=check_api_health,
 )
 ```
@@ -74,6 +74,7 @@ Supply positional arguments with `func_args` and keyword arguments directly as e
 def check_endpoint(url, timeout=5):
     # ... returns True/False
     ...
+
 
 for sample in TimeoutSampler(
     wait_timeout=30,
@@ -174,8 +175,8 @@ for sample in TimeoutSampler(
     wait_timeout=30,
     sleep=5,
     func=my_func,
-    print_log=False,        # suppress all elapsed-time logging
-    print_func_log=False,   # suppress function call details
+    print_log=False,  # suppress all elapsed-time logging
+    print_func_log=False,  # suppress function call details
 ):
     if sample:
         break
@@ -205,7 +206,7 @@ for sample in TimeoutSampler(
     sleep=1,
     func=call_api,
     sensitive_keys=frozenset({"x-custom-secret"}),
-    headers={"Authorization": "Bearer token", "x-custom-secret": "value"}, # pragma: allowlist secret
+    headers={"Authorization": "Bearer token", "x-custom-secret": "value"},  # pragma: allowlist secret
 ):
     if sample:
         break
@@ -221,6 +222,7 @@ If your polling loop always follows the simple pattern of "break when truthy," t
 
 ```python
 from timeout_sampler import retry
+
 
 @retry(wait_timeout=10, sleep=2)
 def wait_for_ready():
@@ -239,9 +241,9 @@ try:
         if sample:
             break
 except TimeoutExpiredError as err:
-    print(err)                # Human-readable message with elapsed time
-    print(err.last_exp)       # The last exception raised by func (or None)
-    print(err.elapsed_time)   # Seconds elapsed before timeout
+    print(err)  # Human-readable message with elapsed time
+    print(err.last_exp)  # The last exception raised by func (or None)
+    print(err.elapsed_time)  # Seconds elapsed before timeout
 ```
 
 See [TimeoutExpiredError Reference](api-exceptions.html) for the full exception API.

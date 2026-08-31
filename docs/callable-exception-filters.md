@@ -18,9 +18,7 @@ for sample in TimeoutSampler(
     wait_timeout=30,
     sleep=2,
     func=call_my_api,
-    exceptions_dict={
-        HttpError: [lambda exc: exc.status >= 500]
-    },
+    exceptions_dict={HttpError: [lambda exc: exc.status >= 500]},
 ):
     if sample:
         break
@@ -46,10 +44,10 @@ Use these to annotate your own helper functions or configuration builders:
 ```python
 from timeout_sampler import ExceptionsDict
 
+
 def build_api_filters(retryable_codes: list[int]) -> ExceptionsDict:
-    return {
-        HttpError: [lambda exc: exc.status in retryable_codes]
-    }
+    return {HttpError: [lambda exc: exc.status in retryable_codes]}
+
 
 filters = build_api_filters([500, 502, 503, 504])
 ```
@@ -76,9 +74,7 @@ A callable filter is any function or lambda that:
 The most concise option for simple conditions:
 
 ```python
-exceptions_dict = {
-    HttpError: [lambda exc: exc.status >= 500]
-}
+exceptions_dict = {HttpError: [lambda exc: exc.status >= 500]}
 ```
 
 ### Named functions
@@ -90,9 +86,8 @@ def is_retryable_error(exc):
     """Retry on server errors and rate limiting."""
     return exc.status >= 500 or exc.status == 429
 
-exceptions_dict = {
-    HttpError: [is_retryable_error]
-}
+
+exceptions_dict = {HttpError: [is_retryable_error]}
 ```
 
 ### Filtering on exception attributes
@@ -101,14 +96,10 @@ Callable filters shine when you need to inspect attributes beyond the exception 
 
 ```python
 # Retry only on specific error codes
-exceptions_dict = {
-    DatabaseError: [lambda exc: exc.error_code in ("LOCK_TIMEOUT", "DEADLOCK")]
-}
+exceptions_dict = {DatabaseError: [lambda exc: exc.error_code in ("LOCK_TIMEOUT", "DEADLOCK")]}
 
 # Retry when a response header says to
-exceptions_dict = {
-    ApiError: [lambda exc: exc.retry_after is not None]
-}
+exceptions_dict = {ApiError: [lambda exc: exc.retry_after is not None]}
 ```
 
 ## Combining String and Callable Filters
@@ -118,7 +109,7 @@ You can mix string and callable filters in the same list. The sampler checks eac
 ```python
 exceptions_dict = {
     ConnectionError: [
-        "Connection refused",                    # string: match against str(exception)
+        "Connection refused",  # string: match against str(exception)
         lambda exc: getattr(exc, "errno", 0) == 104,  # callable: check attribute
     ]
 }
@@ -137,6 +128,7 @@ Callable filters work identically with the `@retry` decorator:
 
 ```python
 from timeout_sampler import retry
+
 
 @retry(
     wait_timeout=60,
@@ -161,8 +153,8 @@ Map different exception classes to different filter strategies in a single `exce
 ```python
 exceptions_dict = {
     HttpError: [lambda exc: exc.status >= 500],
-    ConnectionError: [],                        # retry all connection errors
-    TimeoutError: ["read timed out"],           # retry only read timeouts
+    ConnectionError: [],  # retry all connection errors
+    TimeoutError: ["read timed out"],  # retry only read timeouts
 }
 ```
 
@@ -173,12 +165,12 @@ Use `functools.partial` to create reusable parameterized filters:
 ```python
 from functools import partial
 
+
 def status_in_range(exc, low, high):
     return low <= exc.status < high
 
-exceptions_dict = {
-    HttpError: [partial(status_in_range, low=500, high=600)]
-}
+
+exceptions_dict = {HttpError: [partial(status_in_range, low=500, high=600)]}
 ```
 
 ### Accessing `last_exp` after timeout
@@ -213,9 +205,7 @@ If your callable filter itself raises an exception (for example, accessing an at
 
 ```python
 # This filter accesses .status, but the exception might not have that attribute
-exceptions_dict = {
-    Exception: [lambda exc: exc.status >= 500]
-}
+exceptions_dict = {Exception: [lambda exc: exc.status >= 500]}
 ```
 
 If a plain `Exception("something broke")` is raised (no `.status` attribute), the callable filter raises `AttributeError` internally. The sampler logs a warning, skips that filter, and since no filter matched, stops polling immediately.
