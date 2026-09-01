@@ -33,12 +33,15 @@ Automatically re-run a function until it returns a truthy value.
 ```python
 from timeout_sampler import retry
 
+
 @retry(wait_timeout=30, sleep=2)
 def fetch_cluster_status():
     import requests
+
     resp = requests.get("https://api.example.com/cluster/status")
     resp.raise_for_status()
     return resp.json()["state"] == "ready"
+
 
 # Raises TimeoutExpiredError after 30s if the cluster never reaches "ready"
 fetch_cluster_status()
@@ -59,15 +62,19 @@ Use `functools.partial` to poll a function that requires arguments without using
 from functools import partial
 from timeout_sampler import TimeoutSampler
 
+
 def check_pod_phase(namespace, pod_name):
     """Returns True when the pod is Running."""
     import subprocess, json
+
     result = subprocess.run(
         ["kubectl", "get", "pod", pod_name, "-n", namespace, "-o", "json"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     pod = json.loads(result.stdout)
     return pod["status"]["phase"] == "Running"
+
 
 poll_fn = partial(check_pod_phase, "default", "my-app-pod-7f4b9")
 
@@ -85,10 +92,13 @@ Provide positional and keyword arguments directly to `TimeoutSampler` without wr
 ```python
 from timeout_sampler import TimeoutSampler
 
+
 def is_file_present(directory, filename, min_size_bytes=0):
     import os
+
     path = os.path.join(directory, filename)
     return os.path.isfile(path) and os.path.getsize(path) >= min_size_bytes
+
 
 for sample in TimeoutSampler(
     wait_timeout=60,
@@ -110,10 +120,13 @@ Swallow every occurrence of a specific exception type during polling.
 ```python
 from timeout_sampler import TimeoutSampler
 
+
 def get_resource():
     import json, urllib.request
+
     resp = urllib.request.urlopen("http://localhost:9090/resource")
     return json.loads(resp.read())
+
 
 for sample in TimeoutSampler(
     wait_timeout=30,
@@ -136,8 +149,10 @@ Only ignore exceptions whose message matches specific substrings.
 ```python
 from timeout_sampler import TimeoutSampler
 
+
 def query_database():
     import sqlite3
+
     conn = sqlite3.connect("/var/data/app.db")
     cursor = conn.execute("SELECT count(*) FROM jobs WHERE status = 'done'")
     count = cursor.fetchone()[0]
@@ -145,6 +160,7 @@ def query_database():
     if count == 0:
         raise RuntimeError("no completed jobs yet")
     return count
+
 
 for sample in TimeoutSampler(
     wait_timeout=60,
@@ -168,14 +184,17 @@ Use callable filters to retry based on exception attributes instead of message t
 ```python
 from timeout_sampler import TimeoutSampler
 
+
 class HttpError(Exception):
     def __init__(self, status: int, message: str) -> None:
         self.status = status
         super().__init__(message)
 
+
 def make_request():
     # ... HTTP call that may raise HttpError ...
     return True
+
 
 # Only retry on HTTP 5xx errors; 4xx errors raise immediately.
 for sample in TimeoutSampler(
@@ -212,20 +231,22 @@ Handle several exception types, each with independent message filters.
 ```python
 from timeout_sampler import TimeoutSampler
 
+
 def provision_vm():
     """Calls a cloud API that may fail in multiple ways."""
     # ... cloud SDK call ...
     return {"id": "vm-abc123", "status": "running"}
+
 
 for sample in TimeoutSampler(
     wait_timeout=300,
     sleep=10,
     func=provision_vm,
     exceptions_dict={
-        ConnectionError: [],                          # retry on any connection issue
-        TimeoutError: [],                             # retry on any timeout
+        ConnectionError: [],  # retry on any connection issue
+        TimeoutError: [],  # retry on any timeout
         RuntimeError: ["quota exceeded", "retryable"],  # only retry these messages
-        PermissionError: ["token expired"],            # only retry on expired tokens
+        PermissionError: ["token expired"],  # only retry on expired tokens
     },
 ):
     if sample and sample.get("status") == "running":
@@ -244,18 +265,23 @@ Catch a parent exception class to automatically cover all its subclasses.
 ```python
 from timeout_sampler import TimeoutSampler
 
+
 class ServiceError(Exception):
     pass
+
 
 class TransientError(ServiceError):
     pass
 
+
 class RateLimitError(ServiceError):
     pass
+
 
 def call_external_service():
     # ... API call that may raise TransientError or RateLimitError ...
     return True
+
 
 for sample in TimeoutSampler(
     wait_timeout=60,
@@ -278,15 +304,19 @@ Poll until the function returns a specific value, not just a truthy one.
 ```python
 from timeout_sampler import TimeoutSampler
 
+
 def get_deployment_replicas():
     """Returns the current number of ready replicas."""
     import subprocess, json
+
     result = subprocess.run(
         ["kubectl", "get", "deployment", "web-api", "-o", "json"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     deploy = json.loads(result.stdout)
     return deploy["status"].get("readyReplicas", 0)
+
 
 desired_replicas = 3
 
@@ -347,7 +377,7 @@ for sample in TimeoutSampler(
     sleep=1,
     func=call_api,
     sensitive_keys=frozenset({"x-custom-secret"}),
-    headers={"Authorization": "Bearer token", "x-custom-secret": "value"}, # pragma: allowlist secret
+    headers={"Authorization": "Bearer token", "x-custom-secret": "value"},  # pragma: allowlist secret
 ):
     if sample:
         break
@@ -396,8 +426,10 @@ Access diagnostic information when polling fails.
 ```python
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
+
 def unstable_lookup():
     raise ConnectionError("connection refused on port 5432")
+
 
 try:
     for sample in TimeoutSampler(
@@ -411,7 +443,7 @@ try:
 except TimeoutExpiredError as e:
     print(f"Polling failed: {e}")
     print(f"Last exception type: {type(e.last_exp).__name__}")  # ConnectionError
-    print(f"Last exception message: {e.last_exp}")              # connection refused on port 5432
+    print(f"Last exception message: {e.last_exp}")  # connection refused on port 5432
     print(f"Total elapsed time: {e.elapsed_time}s")
 ```
 

@@ -216,7 +216,7 @@ def test_log_context_logs_non_retried_exception(caplog):
     def always_fails():
         raise ValueError("unexpected")
 
-    with pytest.raises(TimeoutExpiredError) as error_info:
+    def _sampler():
         for _ in TimeoutSampler(
             wait_timeout=2,
             sleep=0,
@@ -227,6 +227,9 @@ def test_log_context_logs_non_retried_exception(caplog):
         ):
             continue
 
+    with pytest.raises(TimeoutExpiredError) as error_info:
+        _sampler()
+
     assert "SSH connectivity to test-vm failed after" in caplog.text
     assert "[last exception: unexpected]" in caplog.text
     assert "Elapsed time:" not in caplog.text
@@ -235,7 +238,7 @@ def test_log_context_logs_non_retried_exception(caplog):
 
 
 def test_log_context_logs_timeout_with_elapsed_time_on_exception(caplog):
-    with pytest.raises(TimeoutExpiredError) as error_info:
+    def _sampler():
         for _ in TimeoutSampler(
             wait_timeout=2,
             sleep=0,
@@ -246,6 +249,9 @@ def test_log_context_logs_timeout_with_elapsed_time_on_exception(caplog):
         ):
             continue
 
+    with pytest.raises(TimeoutExpiredError) as error_info:
+        _sampler()
+
     assert "SSH connectivity to test-vm timed out after" in caplog.text
     assert "[last exception: ssh down]" in caplog.text
     assert "succeeded after" not in caplog.text
@@ -255,7 +261,7 @@ def test_log_context_logs_timeout_with_elapsed_time_on_exception(caplog):
 
 
 def test_timeout_without_exception_omits_last_exception_suffix(caplog):
-    with pytest.raises(TimeoutExpiredError) as error_info:
+    def _sampler():
         for _ in TimeoutSampler(
             wait_timeout=1,
             sleep=0.2,
@@ -263,6 +269,9 @@ def test_timeout_without_exception_omits_last_exception_suffix(caplog):
             print_func_log=False,
         ):
             continue
+
+    with pytest.raises(TimeoutExpiredError) as error_info:
+        _sampler()
 
     assert "timed out after" in caplog.text
     assert "[last exception:" not in caplog.text
@@ -287,7 +296,7 @@ def test_without_log_context_uses_func_name_on_failure(caplog):
     def always_fails():
         raise ValueError("unexpected")
 
-    with pytest.raises(TimeoutExpiredError) as error_info:
+    def _sampler():
         for _ in TimeoutSampler(
             wait_timeout=2,
             sleep=0,
@@ -296,6 +305,9 @@ def test_without_log_context_uses_func_name_on_failure(caplog):
             print_func_log=False,
         ):
             continue
+
+    with pytest.raises(TimeoutExpiredError) as error_info:
+        _sampler()
 
     assert "Function: tests.test_timeout_sampler.always_fails failed after" in caplog.text
     assert "[last exception: unexpected]" in caplog.text
@@ -352,16 +364,19 @@ def test_partial_lambda_uses_lambda_label_on_success(caplog):
 
 
 def test_sampler_negative():
-    sampler = TimeoutSampler(
-        wait_timeout=10,
-        sleep=1,
-        func=lambda: False,
-        print_log=False,
-    )
-    with pytest.raises(TimeoutExpiredError):
+    def _sampler():
+        sampler = TimeoutSampler(
+            wait_timeout=10,
+            sleep=1,
+            func=lambda: False,
+            print_log=False,
+        )
         for sample in sampler:
             if sample:
                 return
+
+    with pytest.raises(TimeoutExpiredError):
+        _sampler()
 
 
 # retry decorator tests
@@ -459,8 +474,7 @@ class TestCallableExceptionFilter:
         ],
     )
     def test_callable_filter_retries_until_timeout(self, exceptions_dict: ExceptionsDict, status: int) -> None:
-        """Exception matching the filter should be ignored, retrying until timeout."""
-        with pytest.raises(TimeoutExpiredError):
+        def _sampler():
             for _ in TimeoutSampler(
                 wait_timeout=1,
                 sleep=1,
@@ -470,6 +484,10 @@ class TestCallableExceptionFilter:
                 status=status,
             ):
                 continue
+
+        """Exception matching the filter should be ignored, retrying until timeout."""
+        with pytest.raises(TimeoutExpiredError):
+            _sampler()
 
     def test_callable_filter_retries_until_success(self) -> None:
         """Callable filter matches → retry → function eventually succeeds."""
@@ -495,7 +513,8 @@ class TestCallableExceptionFilter:
 
     def test_callable_filter_raises_immediately_when_not_matched(self) -> None:
         """Callable returning False should raise TimeoutExpiredError immediately."""
-        with pytest.raises(TimeoutExpiredError) as exc_info:
+
+        def _sampler():
             for _ in TimeoutSampler(
                 wait_timeout=1,
                 sleep=1,
@@ -505,12 +524,16 @@ class TestCallableExceptionFilter:
                 status=400,
             ):
                 continue
+
+        with pytest.raises(TimeoutExpiredError) as exc_info:
+            _sampler()
         assert exc_info.value.last_exp is not None
         assert exc_info.value.last_exp.status == 400
 
     def test_callable_filter_skips_on_attribute_error(self, caplog: pytest.LogCaptureFixture) -> None:
         """Callable that raises (e.g. missing attribute) is skipped, not propagated."""
-        with pytest.raises(TimeoutExpiredError) as exc_info:
+
+        def _sampler():
             for _ in TimeoutSampler(
                 wait_timeout=1,
                 sleep=1,
@@ -520,6 +543,9 @@ class TestCallableExceptionFilter:
                 status=502,
             ):
                 continue
+
+        with pytest.raises(TimeoutExpiredError) as exc_info:
+            _sampler()
         assert exc_info.value.last_exp is not None
         assert "Callable filter" in caplog.text
         assert "treating as non-matching" in caplog.text
@@ -527,7 +553,7 @@ class TestCallableExceptionFilter:
 
     def test_class_passed_as_filter_raises_type_error(self) -> None:
         """Passing an exception class instead of a callable should raise TypeError at init."""
-        with pytest.raises(TypeError, match="contains a class.*instead of a callable"):
+        with pytest.raises(TypeError, match=r"contains a class.*instead of a callable"):
             TimeoutSampler(
                 wait_timeout=1,
                 sleep=1,

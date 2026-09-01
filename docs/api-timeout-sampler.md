@@ -48,8 +48,10 @@ TimeoutSampler(
 ```python
 from timeout_sampler import TimeoutSampler
 
+
 def check_service():
     return {"status": "ready"}
+
 
 sampler = TimeoutSampler(
     wait_timeout=30,
@@ -69,7 +71,7 @@ sampler = TimeoutSampler(
     sleep=2,
     func=requests.get,
     func_args=("https://api.example.com/health",),
-    timeout=5,          # forwarded as requests.get(..., timeout=5)
+    timeout=5,  # forwarded as requests.get(..., timeout=5)
 )
 ```
 
@@ -103,9 +105,11 @@ def __iter__(self) -> Any
 ```python
 from timeout_sampler import TimeoutSampler
 
+
 def get_pod_status():
     # returns "Pending", "Running", etc.
     ...
+
 
 for sample in TimeoutSampler(wait_timeout=120, sleep=5, func=get_pod_status):
     if sample == "Running":
@@ -138,7 +142,7 @@ For a detailed walkthrough of the matching algorithm, see [How Exception Matchin
 ```python
 {
     ExceptionClass: ["message_substring", lambda exc: exc.attr > 0, ...],
-    AnotherException: [],   # empty list = match all messages
+    AnotherException: [],  # empty list = match all messages
 }
 ```
 
@@ -348,7 +352,7 @@ for sample in TimeoutSampler(
     sleep=1,
     func=call_api,
     sensitive_keys=frozenset({"x-custom-secret"}),
-    headers={"Authorization": "Bearer token", "x-custom-secret": "value"}, # pragma: allowlist secret
+    headers={"Authorization": "Bearer token", "x-custom-secret": "value"},  # pragma: allowlist secret
 ):
     if sample:
         break

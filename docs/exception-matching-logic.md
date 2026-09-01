@@ -200,8 +200,8 @@ try:
         if sample:
             break
 except TimeoutExpiredError as e:
-    print(e.last_exp)       # The original exception (e.g., ConnectionError)
-    print(e.elapsed_time)   # Seconds elapsed before the error
+    print(e.last_exp)  # The original exception (e.g., ConnectionError)
+    print(e.elapsed_time)  # Seconds elapsed before the error
 ```
 
 See [TimeoutExpiredError Reference](api-exceptions.html) for the full attribute and method reference.

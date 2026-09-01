@@ -72,10 +72,12 @@ The decorator returns the first **truthy** value returned by the decorated funct
 ```python
 from timeout_sampler import retry
 
+
 @retry(wait_timeout=30, sleep=5)
 def wait_for_service():
     response = requests.get("http://localhost:8080/health")
     return response.status_code == 200
+
 
 # Polls every 5 seconds for up to 30 seconds.
 # Returns True on success, raises TimeoutExpiredError on timeout.
@@ -89,10 +91,12 @@ Arguments passed at call time are forwarded to the decorated function:
 ```python
 from timeout_sampler import retry
 
+
 @retry(wait_timeout=10, sleep=2)
 def check_status(host, port, path="/health"):
     response = requests.get(f"http://{host}:{port}{path}")
     return response.ok
+
 
 # 'host' and 'port' are forwarded as func_args;
 # 'path' is forwarded as a keyword argument.
@@ -104,6 +108,7 @@ check_status("localhost", 8080, path="/ready")
 ```python
 from timeout_sampler import retry
 
+
 @retry(
     wait_timeout=20,
     sleep=3,
@@ -111,6 +116,7 @@ from timeout_sampler import retry
 )
 def fetch_data():
     return requests.get("http://api.example.com/data").json()
+
 
 # ConnectionError with any message is ignored during polling.
 # TimeoutError is ignored only if its message contains "timed out".
@@ -125,6 +131,7 @@ Filter values can be callables that receive the exception instance and return a 
 ```python
 from timeout_sampler import retry
 
+
 @retry(
     wait_timeout=60,
     sleep=1,
@@ -132,6 +139,7 @@ from timeout_sampler import retry
 )
 def make_request():
     return requests.get("http://api.example.com/data").json()
+
 
 # Only retries on HTTP 5xx errors; 4xx errors propagate immediately.
 result = make_request()
@@ -156,6 +164,7 @@ See [Filtering and Handling Exceptions](handling-exceptions.html) for the full e
 ```python
 from timeout_sampler import retry
 
+
 @retry(wait_timeout=5, sleep=1, print_log=False)
 def quiet_check():
     return some_condition()
@@ -166,13 +175,15 @@ def quiet_check():
 ```python
 from timeout_sampler import retry
 
+
 @retry(wait_timeout=30, sleep=2, sensitive_keys=frozenset({"x-custom-secret"}))
 def call_api(headers):
     return requests.get("http://api.example.com", headers=headers).json()
 
+
 # Keys like 'authorization', 'token', 'password' are redacted by default.
 # 'x-custom-secret' is added to the redaction list.
-call_api(headers={"Authorization": "Bearer tok", "x-custom-secret": "val"}) # pragma: allowlist secret
+call_api(headers={"Authorization": "Bearer tok", "x-custom-secret": "val"})  # pragma: allowlist secret
 # Log output shows: {'Authorization': '***', 'x-custom-secret': '***'}
 ```
 
@@ -181,10 +192,12 @@ call_api(headers={"Authorization": "Bearer tok", "x-custom-secret": "val"}) # pr
 ```python
 from timeout_sampler import retry
 
+
 @retry(wait_timeout=15, sleep=2)
 def get_items():
     items = fetch_items_from_queue()
     return items  # Returns the list when non-empty; retries on empty list
+
 
 result = get_items()  # result is the first non-empty list returned
 ```
@@ -194,9 +207,11 @@ result = get_items()  # result is the first non-empty list returned
 ```python
 from timeout_sampler import retry, TimeoutExpiredError
 
+
 @retry(wait_timeout=5, sleep=1)
 def unreliable():
     return False
+
 
 try:
     unreliable()

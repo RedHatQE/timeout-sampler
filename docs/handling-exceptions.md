@@ -148,9 +148,9 @@ for sample in TimeoutSampler(
     sleep=10,
     func=deploy_resource,
     exceptions_dict={
-        ConnectionError: [],                      # ignore all connection errors
-        TimeoutError: [],                         # ignore all timeout errors
-        ValueError: ["not ready", "pending"],     # ignore only specific messages
+        ConnectionError: [],  # ignore all connection errors
+        TimeoutError: [],  # ignore all timeout errors
+        ValueError: ["not ready", "pending"],  # ignore only specific messages
     },
 ):
     if sample:
@@ -180,6 +180,7 @@ The `exceptions_dict` parameter works identically with the `@retry` decorator:
 
 ```python
 from timeout_sampler import retry
+
 
 @retry(
     wait_timeout=30,

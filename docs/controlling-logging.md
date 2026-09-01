@@ -131,6 +131,7 @@ The same three parameters are available on the `@retry` decorator:
 ```python
 from timeout_sampler import retry
 
+
 @retry(wait_timeout=30, sleep=5, print_log=True, print_func_log=True, print_func_args=False)
 def fetch_data(api_key):
     response = requests.get("https://api.example.com", headers={"Authorization": api_key})
@@ -236,7 +237,7 @@ for sample in TimeoutSampler(
     sleep=1,
     func=call_api,
     sensitive_keys=frozenset({"x-custom-secret"}),
-    headers={"Authorization": "Bearer token", "x-custom-secret": "value"}, # pragma: allowlist secret
+    headers={"Authorization": "Bearer token", "x-custom-secret": "value"},  # pragma: allowlist secret
 ):
     if sample:
         break
@@ -251,6 +252,7 @@ The `sensitive_keys` parameter is also available on the `@retry` decorator:
 
 ```python
 from timeout_sampler import retry
+
 
 @retry(wait_timeout=30, sleep=5, sensitive_keys=frozenset({"x-api-secret"}))
 def fetch_data(x_api_secret):

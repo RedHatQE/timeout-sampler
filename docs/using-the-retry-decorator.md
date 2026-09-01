@@ -12,10 +12,12 @@ You want to automatically retry a function until it returns a truthy value—wit
 ```python
 from timeout_sampler import retry
 
+
 @retry(wait_timeout=30, sleep=5)
 def check_service_health():
     response = requests.get("https://my-service/health")
     return response.status_code == 200
+
 
 # Blocks until the function returns True or 30 seconds elapse
 check_service_health()
@@ -62,6 +64,7 @@ def is_database_ready():
 ```python
 from timeout_sampler import retry
 
+
 @retry(wait_timeout=60, sleep=2)
 def is_database_ready():
     status = db.get_status()
@@ -93,10 +96,12 @@ The decorator passes through all positional and keyword arguments to your functi
 ```python
 from timeout_sampler import retry
 
+
 @retry(wait_timeout=30, sleep=3)
 def wait_for_pod(namespace, name, status="Running"):
     pod = get_pod(namespace, name)
     return pod.status == status
+
 
 # Arguments are forwarded to the decorated function
 wait_for_pod("default", "my-pod", status="Running")
@@ -111,6 +116,7 @@ When the function returns a truthy value, that value is returned to the caller�
 def fetch_result():
     result = get_async_result()
     return result  # Returns the actual result object when truthy
+
 
 data = fetch_result()
 print(data)  # The truthy value your function returned
@@ -190,7 +196,7 @@ By default, the decorator logs timing information and function details. You can 
 @retry(
     wait_timeout=10,
     sleep=1,
-    print_log=False,       # Suppress all elapsed-time logs
+    print_log=False,  # Suppress all elapsed-time logs
 )
 def quiet_check():
     return some_condition()
@@ -220,8 +226,9 @@ Sensitive keyword argument values (such as `Authorization`, `token`, `password`,
 def call_api(headers):
     return requests.get("https://my-service/api", headers=headers).ok
 
+
 # The "x-custom-secret" value will appear as "***" in logs
-call_api(headers={"Authorization": "Bearer token", "x-custom-secret": "value"}) # pragma: allowlist secret
+call_api(headers={"Authorization": "Bearer token", "x-custom-secret": "value"})  # pragma: allowlist secret
 ```
 
 > **Note:** Key matching is case-insensitive and uses exact match — a key named `"token"` is redacted, but `"nextPageToken"` is not.
